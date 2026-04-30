@@ -125,7 +125,32 @@
     font-size: 11px; color: var(--text3);
     text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px;
   }
-  .stat-val { font-size: 28px; font-weight: 600; font-family: 'Barlow Condensed', sans-serif; color: var(--text); }
+  .stat-val { font-size: 28px; font-weight: 600; font-family: 'Barlow Condensed', sans-serif; }
+
+  /* Hero variant — used on the Overview page top row to differentiate from
+     the per-campus tiles below. Inverted feel: gold-leaning background,
+     full gold border, left-side accent bar instead of the thin top stripe. */
+  .stats.stats-hero .stat {
+    background: linear-gradient(135deg, rgba(232,170,69,0.22) 0%, rgba(232,170,69,0.07) 60%, rgba(232,170,69,0.02) 100%);
+    border: 1px solid rgba(232,170,69,0.55);
+    padding: 18px 18px 18px 22px;
+  }
+  .stats.stats-hero .stat::before {
+    height: 100%;
+    width: 3px;
+    top: 0; left: 0; right: auto; bottom: 0;
+    background: var(--gold);
+    opacity: 1;
+  }
+  .stats.stats-hero .stat-label {
+    color: rgba(232,170,69,0.9);
+    font-weight: 600;
+  }
+  .stats.stats-hero .stat-val {
+    font-size: 34px;
+    color: var(--gold);
+    text-shadow: 0 1px 14px rgba(232,170,69,0.25);
+  }
   .c-blue   { color: var(--blue); }
   .c-gold   { color: var(--gold); }
   .c-amber  { color: var(--gold); }
@@ -430,30 +455,7 @@
   /* ══ TABLE SPACING FIX ══ */
   .table-wrap { overflow-x: auto; }
   #repair-table { table-layout: fixed; min-width: 900px; }
-  #repair-table thead th {
-    padding: 11px 16px;
-    border-right: 1px solid #1a1a1a;
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text3);
-    text-align: left;
-    cursor: pointer;
-    user-select: none;
-    transition: color 0.12s;
-  }
-  #repair-table thead th:hover { color: var(--text2); }
-  #repair-table thead th.sort-active { color: var(--gold); }
-  #repair-table thead th .sort-arrow {
-    display: inline-block;
-    margin-left: 6px;
-    font-size: 9px;
-    opacity: 0.6;
-    vertical-align: 1px;
-  }
-  #repair-table thead th.sort-active .sort-arrow { opacity: 1; }
+  #repair-table thead th { padding: 11px 16px; border-right: 1px solid #1a1a1a; }
   #repair-table thead th:last-child { border-right: none; }
   #repair-table tbody td { padding: 12px 16px; border-right: 1px solid #141414; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #repair-table tbody td:last-child { border-right: none; }
@@ -647,12 +649,12 @@
       <table id="repair-table">
         <thead>
           <tr>
-            <th class="col-name" data-sort="name" onclick="setRSort('name')">Equipment / Item<span class="sort-arrow">↕</span></th>
-            <th class="col-campus" data-sort="campus" onclick="setRSort('campus')">Campus<span class="sort-arrow">↕</span></th>
-            <th class="col-type" data-sort="type" onclick="setRSort('type')">Type<span class="sort-arrow">↕</span></th>
-            <th class="col-status" data-sort="status" onclick="setRSort('status')">Status<span class="sort-arrow">↕</span></th>
-            <th class="col-priority" data-sort="priority" onclick="setRSort('priority')">Priority<span class="sort-arrow">↕</span></th>
-            <th class="col-assigned" data-sort="assignee" onclick="setRSort('assignee')">Assigned To<span class="sort-arrow">↕</span></th>
+            <th class="col-name" onclick="setRSort('name')">Equipment / Item</th>
+            <th class="col-campus" onclick="setRSort('campus')">Campus</th>
+            <th class="col-type" onclick="setRSort('type')">Type</th>
+            <th class="col-status" onclick="setRSort('status')">Status</th>
+            <th class="col-priority" onclick="setRSort('priority')">Priority</th>
+            <th class="col-assigned" onclick="setRSort('assignee')">Assigned To</th>
             
           </tr>
         </thead>
@@ -719,12 +721,11 @@
     <div class="page-hdr">
       <div>
         <div class="page-title">Campus Overview</div>
-        <div class="page-sub">30,000 ft view of all repairs and capital projects by location</div>
       </div>
     </div>
 
     <!-- Overview stats -->
-    <div id="overview-stats" class="stats" style="margin-bottom:1.5rem;"></div>
+    <div id="overview-stats" class="stats stats-hero" style="margin-bottom:1.5rem;"></div>
 
     <!-- Campus grid -->
     <div id="campus-grid" style="
@@ -1112,6 +1113,16 @@ function aiKeyDown(e) {
 
 
 // ── Campus Overview ───────────────────────────────────────────
+function handleTileClick(el) {
+  var campus = el.getAttribute('data-campus');
+  if (campus) showCampusDetail(campus);
+}
+
+function handleJumpClick(btn) {
+  var campus = btn.getAttribute('data-campus');
+  if (campus) jumpToCampus(campus);
+}
+
 function renderOverview() {
   var grid = document.getElementById('campus-grid');
   var statsEl = document.getElementById('overview-stats');
@@ -1124,10 +1135,10 @@ function renderOverview() {
 
   if (statsEl) {
     statsEl.innerHTML =
-      stat(totalCampuses,'Campuses','') +
-      stat(totalOpen,'Open Repairs','') +
-      stat(criticalCount,'Critical', criticalCount > 0 ? 'c-gold' : '') +
-      stat(totalProjects,'Capital Projects','');
+      stat(totalCampuses,'Campuses','c-gold') +
+      stat(totalOpen,'Open Repairs','c-gold') +
+      stat(criticalCount,'Critical','c-gold') +
+      stat(totalProjects,'Capital Projects','c-gold');
   }
 
   grid.innerHTML = CAMPUSES.map(function(campus) {
@@ -1189,7 +1200,7 @@ function showCampusDetail(campus) {
     other > 0 ? '<div class="detail-row"><span class="detail-row-label">Other</span><span class="detail-row-val">'+other+'</span></div>' : '',
     statusRows ? '<div class="detail-section-title">Repairs by Status</div>'+statusRows : '',
     campusProjects.length > 0 ? '<div class="detail-section-title">Capital Projects</div>'+(projRows||'<div style="font-size:12px;color:#555;padding:8px 0;">No active projects</div>') : '',
-    '<button class="view-all-btn" id="jump-btn" onclick="handleJumpClick(this)">View All Repairs for this Campus →</button>'
+    '<button class="view-all-btn" id="jump-btn" data-campus="'+campus.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'" onclick="handleJumpClick(this)">View All Repairs for this Campus →</button>'
   ].join('');
 
   document.getElementById('campus-detail-body').innerHTML = html;
@@ -1256,7 +1267,6 @@ function loadAll() {
   api({ action:'getRepairs' }, function(res) {
     repairs = res.data || [];
     renderRepairs();
-    renderOverview();
   });
   api({ action:'getProjects' }, function(res) {
     projects = res.data || [];
@@ -1334,23 +1344,8 @@ function renderRepairs() {
     if (rSort === 'assignee') return (a.assigned||'').localeCompare(b.assigned||'');
     if (rSort === 'campus') return (a.campus||'').localeCompare(b.campus||'');
     if (rSort === 'status') return (statusOrder[a.status]||0) - (statusOrder[b.status]||0);
-    if (rSort === 'name') return (a.item||'').localeCompare(b.item||'');
-    if (rSort === 'type') return (a.type||'').localeCompare(b.type||'');
     return new Date(b.reported||0) - new Date(a.reported||0); // newest default
   });
-
-  // Paint active sort header
-  document.querySelectorAll('#repair-table thead th').forEach(function(th){
-    th.classList.remove('sort-active');
-    var arrow = th.querySelector('.sort-arrow');
-    if (arrow) arrow.textContent = '↕';
-  });
-  var activeTh = document.querySelector('#repair-table thead th[data-sort="'+rSort+'"]');
-  if (activeTh) {
-    activeTh.classList.add('sort-active');
-    var arrow = activeTh.querySelector('.sort-arrow');
-    if (arrow) arrow.textContent = '↑';
-  }
 
   // Populate assignee filter dynamically
   var assigneeSelect = document.getElementById('assignee-filter');
@@ -1366,8 +1361,8 @@ function renderRepairs() {
   var crit = data.filter(function(r){ return r.priority==='Critical' && r.status!=='Resolved'; }).length;
   var res  = data.filter(function(r){ return r.status==='Resolved'; }).length;
   document.getElementById('repair-stats').innerHTML =
-    stat(data.length,'Showing','') + stat(open,'Open','') +
-    stat(crit,'Critical', crit > 0 ? 'c-gold' : '') + stat(res,'Resolved', res > 0 ? 'c-green' : '');
+    stat(data.length,'Showing','c-gold') + stat(open,'Open','c-gold') +
+    stat(crit,'Critical','c-gold') + stat(res,'Resolved','c-gold');
 
   var list = document.getElementById('repair-list');
   var countEl = document.getElementById('repair-row-count');
@@ -1697,10 +1692,6 @@ function showView(name, btn) {
   document.getElementById('view-'+name).classList.add('active');
   if (btn) btn.classList.add('active');
   closePanel();
-  // Re-render the view we're switching to so it always reflects current data
-  if (name === 'overview') renderOverview();
-  else if (name === 'repairs') renderRepairs();
-  else if (name === 'projects') renderProjects();
 }
 
 // ── Filter controls ───────────────────────────────────────────
