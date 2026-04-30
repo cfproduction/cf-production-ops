@@ -1148,7 +1148,7 @@ function renderOverview() {
     var pc = campusProjects.length;
     var safecamp = campus.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
     return [
-      '<div class="campus-tile" data-campus="'+safecamp+'" onclick="handleTileClick(this)">',
+      '<div class="campus-tile" data-campus="'+safecamp+'">',
         '<div class="campus-tile-name">'+campus+'</div>',
         '<div class="campus-tile-stats">',
           '<div class="campus-stat">',
@@ -1200,7 +1200,7 @@ function showCampusDetail(campus) {
     other > 0 ? '<div class="detail-row"><span class="detail-row-label">Other</span><span class="detail-row-val">'+other+'</span></div>' : '',
     statusRows ? '<div class="detail-section-title">Repairs by Status</div>'+statusRows : '',
     campusProjects.length > 0 ? '<div class="detail-section-title">Capital Projects</div>'+(projRows||'<div style="font-size:12px;color:#555;padding:8px 0;">No active projects</div>') : '',
-    '<button class="view-all-btn" id="jump-btn" data-campus="'+campus.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'" onclick="handleJumpClick(this)">View All Repairs for this Campus →</button>'
+    '<button class="view-all-btn" id="jump-btn" data-campus="'+campus.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'">View All Repairs for this Campus →</button>'
   ].join('');
 
   document.getElementById('campus-detail-body').innerHTML = html;
@@ -1721,6 +1721,34 @@ function clearFields(ids) { ids.forEach(function(id){ document.getElementById(id
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ── Overview click delegation ─────────────────────────────────
+// Bound on static parents instead of inline onclick so it works regardless of
+// the Apps Script HtmlService sandbox/CSP rules around inline event handlers.
+(function bindOverviewClicks() {
+  var grid = document.getElementById('campus-grid');
+  if (grid) {
+    grid.addEventListener('click', function(e) {
+      var tile = e.target.closest('.campus-tile');
+      if (!tile) return;
+      var campus = tile.getAttribute('data-campus');
+      if (campus) showCampusDetail(campus);
+    });
+  }
+  var panelBody = document.getElementById('campus-detail-body');
+  if (panelBody) {
+    panelBody.addEventListener('click', function(e) {
+      var jumpBtn = e.target.closest('#jump-btn');
+      if (jumpBtn) {
+        var campus = jumpBtn.getAttribute('data-campus');
+        if (campus) jumpToCampus(campus);
+        return;
+      }
+      var closeBtn = e.target.closest('.detail-close-btn');
+      if (closeBtn) closeCampusDetail();
+    });
+  }
+})();
 </script>
 
 <!-- ── LOGIN OVERLAY ── -->
