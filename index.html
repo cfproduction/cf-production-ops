@@ -165,10 +165,10 @@
     border-radius: 4px; padding: 5px 14px;
     font-family: 'Barlow Condensed', sans-serif;
     font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
-    cursor: pointer; color: var(--text2); transition: all 0.12s;
+    cursor: pointer; color: var(--gold); transition: all 0.12s;
   }
-  .fb:hover { background: var(--bg3); border-color: var(--border2); color: var(--gold); }
-  .fb.on { background: rgba(232,170,69,0.1); border-color: var(--gold); color: var(--gold); }
+  .fb:hover { background: var(--bg3); border-color: var(--gold); }
+  .fb.on { background: rgba(232,170,69,0.12); border-color: var(--gold); color: var(--gold); }
   select.fs {
     background: var(--bg2); border: 1px solid var(--border);
     border-radius: 3px; padding: 5px 28px 5px 12px;
@@ -773,7 +773,7 @@
         <select class="fi" id="m-priority"><option>Low</option><option>Medium</option><option selected>High</option><option>Critical</option></select></div>
     </div>
     <div class="fg"><label class="fl">Issue Description</label><textarea class="fi" id="m-desc" placeholder="Describe the problem…"></textarea></div>
-    <div class="fg"><label class="fl">Assigned To (optional)</label><input class="fi" id="m-assigned" placeholder="Team member name" /></div>
+    <div class="fg"><label class="fl">Assigned To (optional)</label><select class="fi" id="m-assigned"><option value="">— Unassigned —</option></select></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('repair')">Cancel</button>
       <button class="btn btn-dark" onclick="saveRepair()">Save Item</button>
@@ -818,6 +818,7 @@ var STATUSES = ['Reported','Diagnosed','Parts Ordered','Out For Repair','Testing
 // ── State ─────────────────────────────────────────────────────
 var repairs  = [];
 var projects = [];
+var users    = [];
 var rFilter  = { cat:'all', campus:'all', status:'all', assignee:'all', search:'' };
 var rSort = 'newest';
 var pFilter  = 'all';
@@ -950,15 +951,18 @@ function addComment(repairId) {
   if (!input || !input.value.trim()) return;
   var r = repairs.find(function(x){ return x.id===repairId; });
   if (!r) return;
-  var comments = parseComments(r.comments||'');
   var now = new Date();
   var timeStr = now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+
     ' '+now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-  comments.push({ author: currentUser.name, time: timeStr, text: input.value.trim() });
+  var comment = { author: currentUser.name, time: timeStr, text: input.value.trim() };
+  var comments = parseComments(r.comments||'');
+  comments.push(comment);
   r.comments = JSON.stringify(comments);
-  patchRepair(repairId, { comments: r.comments });
   input.value = '';
   showRepair(repairId);
+  api({ action:'addComment', repairId: repairId, comment: comment }, function(res) {
+    if (res.error) toast('Comment saved but sync failed: ' + res.error);
+  });
 }
 
 function deleteComment(repairId, idx) {
@@ -1278,6 +1282,17 @@ function loadAll() {
     renderProjects();
     onBothLoaded();
   });
+  api({ action:'getUsers' }, function(res) {
+    users = res.data || [];
+    populateUserDropdowns();
+  });
+}
+
+function populateUserDropdowns() {
+  var opts = '<option value="">— Unassigned —</option>' +
+    users.map(function(u){ return '<option value="'+esc(u.name)+'">'+esc(u.name)+'</option>'; }).join('');
+  var el = document.getElementById('m-assigned');
+  if (el) el.innerHTML = opts;
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -1454,7 +1469,10 @@ function showRepair(id) {
     pf('Reported', fmtDate(r.reported))+
     (canEdit?
       '<div class="pf"><div class="pf-label">Assigned To</div>'+
-      '<input class="inline-input" value="'+esc(r.assigned||'')+'" placeholder="Assign to…" onchange="patchRepair(\''+id+'\',{assigned:this.value})" /></div>'
+      '<select class="inline-input" onchange="patchRepair(\''+id+'\',{assigned:this.value})">'+
+      '<option value="" '+(r.assigned?'':'selected')+'>— Unassigned —</option>'+
+      users.map(function(u){ return '<option value="'+esc(u.name)+'"'+(r.assigned===u.name?' selected':'')+'>'+esc(u.name)+'</option>'; }).join('')+
+      '</select></div>'
       : pf('Assigned To', r.assigned||'—'))+
     prioHtml+
     '<div class="pf"><div class="pf-label">Issue</div><div class="pf-val" style="font-size:13px;color:#888;">'+esc(r.desc)+'</div></div>'+
