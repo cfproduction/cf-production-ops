@@ -161,14 +161,14 @@
   /* ── Filters ── */
   .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1rem; align-items: center; }
   .fb {
-    background: #000; border: 1px solid #222;
-    border-radius: 3px; padding: 5px 14px;
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 5px 14px;
     font-family: 'Barlow Condensed', sans-serif;
     font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
-    cursor: pointer; color: var(--gold); transition: all 0.12s;
+    cursor: pointer; color: var(--text2); transition: all 0.12s;
   }
-  .fb:hover { background: #1a1600; }
-  .fb.on { background: var(--gold); color: #000; border-color: var(--gold); }
+  .fb:hover { background: var(--bg3); border-color: var(--border2); color: var(--gold); }
+  .fb.on { background: rgba(232,170,69,0.1); border-color: var(--gold); color: var(--gold); }
   select.fs {
     background: var(--bg2); border: 1px solid var(--border);
     border-radius: 3px; padding: 5px 28px 5px 12px;
@@ -1264,14 +1264,19 @@ function api(params, cb) {
 }
 
 function loadAll() {
+  var loaded = 0;
+  function onBothLoaded() {
+    if (++loaded === 2) renderOverview();
+  }
   api({ action:'getRepairs' }, function(res) {
     repairs = res.data || [];
     renderRepairs();
+    onBothLoaded();
   });
   api({ action:'getProjects' }, function(res) {
     projects = res.data || [];
     renderProjects();
-    renderOverview();
+    onBothLoaded();
   });
 }
 
