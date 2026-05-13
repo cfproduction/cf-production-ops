@@ -1344,15 +1344,29 @@ function toggleSelect(id, e) {
   e.stopPropagation();
   if (selectedIds.has(id)) { selectedIds.delete(id); } else { selectedIds.add(id); }
   updateBulkBar();
-  renderRepairs();
+  // Update just this row's visual state without re-rendering
+  document.querySelectorAll('#repair-list .row-check').forEach(function(el) {
+    if (el.dataset.id === id) {
+      el.checked = selectedIds.has(id);
+      var row = el.closest('tr');
+      if (row) {
+        if (selectedIds.has(id)) { row.classList.add('bulk-sel'); }
+        else { row.classList.remove('bulk-sel'); }
+      }
+    }
+  });
 }
 
 function toggleSelectAll(cb) {
   document.querySelectorAll('#repair-list .row-check').forEach(function(el) {
     if (cb.checked) { selectedIds.add(el.dataset.id); } else { selectedIds.delete(el.dataset.id); }
+    el.checked = cb.checked;
+    var row = el.closest('tr');
+    if (row) {
+      if (cb.checked) { row.classList.add('bulk-sel'); } else { row.classList.remove('bulk-sel'); }
+    }
   });
   updateBulkBar();
-  renderRepairs();
 }
 
 function updateBulkBar() {
