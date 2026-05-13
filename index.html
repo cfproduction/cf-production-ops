@@ -467,7 +467,23 @@
   #repair-table .col-status { width: 13%; }
   #repair-table .col-priority { width: 9%; }
   #repair-table .col-assigned { width: 15%; }
-  .row-check { width: 15px; height: 15px; cursor: pointer; accent-color: var(--gold); }
+  .row-check {
+    width: 15px; height: 15px; cursor: pointer;
+    appearance: none; -webkit-appearance: none;
+    background: var(--bg3); border: 1px solid var(--border2);
+    border-radius: 3px; position: relative; flex-shrink: 0;
+    transition: all 0.12s;
+  }
+  .row-check:checked {
+    background: var(--gold); border-color: var(--gold);
+  }
+  .row-check:checked::after {
+    content: ''; position: absolute;
+    left: 4px; top: 1px; width: 4px; height: 8px;
+    border: 2px solid #000; border-top: none; border-left: none;
+    transform: rotate(45deg);
+  }
+  .row-check:hover { border-color: var(--gold); }
   #repair-table tbody tr.bulk-sel { background: rgba(232,170,69,0.07) !important; border-left: 2px solid var(--gold) !important; }
 
   /* ── Bulk action bar ── */
@@ -1507,10 +1523,9 @@ function renderRepairs() {
   list.innerHTML = data.map(function(r) {
     var isSel = selectedIds.has(r.id);
     var rowClass = (selId===r.id?'sel':'') + (isSel?' bulk-sel':'');
-    return '<tr class="'+rowClass+'" onclick="showRepair(\''+r.id+'\')">'+
-      '<td class="col-check" onclick="event.stopPropagation()">'+
-        '<input type="checkbox" class="row-check" data-id="'+r.id+'" '+(isSel?'checked':'')+
-        ' onchange="toggleSelect(\''+r.id+'\',event)" onclick="event.stopPropagation()" /></td>'+
+    return '<tr class="'+rowClass+'" data-repair-id="'+r.id+'">'+
+      '<td class="col-check">'+
+        '<input type="checkbox" class="row-check" data-id="'+r.id+'" '+(isSel?'checked':'')+' /></td>'+
       '<td class="item-name col-name">'+esc(r.item)+'</td>'+
       '<td class="col-campus"><span class="b b-campus">'+esc(r.campus)+'</span></td>'+
       '<td class="col-type"><span class="b '+catClass(r.type)+'">'+r.type+'</span></td>'+
@@ -1519,6 +1534,21 @@ function renderRepairs() {
       '<td class="col-assigned">'+esc(r.assigned||'—')+'</td>'+
       '</tr>';
   }).join('');
+  // Event delegation for row clicks and checkbox changes
+  list.onclick = function(e) {
+    var cb = e.target.closest('.row-check');
+    if (cb) {
+      var id = cb.dataset.id;
+      if (selectedIds.has(id)) { selectedIds.delete(id); } else { selectedIds.add(id); }
+      cb.checked = selectedIds.has(id);
+      var row = cb.closest('tr');
+      if (row) { selectedIds.has(id) ? row.classList.add('bulk-sel') : row.classList.remove('bulk-sel'); }
+      updateBulkBar();
+      return;
+    }
+    var row = e.target.closest('tr[data-repair-id]');
+    if (row) showRepair(row.getAttribute('data-repair-id'));
+  };
   if (countEl) countEl.textContent = 'Showing ' + data.length + ' of ' + repairs.length + ' items';
 }
 
