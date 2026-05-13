@@ -460,12 +460,27 @@
   #repair-table tbody td { padding: 12px 16px; border-right: 1px solid #141414; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #repair-table tbody td:last-child { border-right: none; }
   #repair-table tbody tr { border-bottom: 1px solid #1e1e1e; }
-  #repair-table .col-name { width: 30%; white-space: normal; }
-  #repair-table .col-campus { width: 15%; }
+  #repair-table .col-check { width: 40px; text-align: center; padding: 0 8px !important; }
+  #repair-table .col-name { width: 28%; white-space: normal; }
+  #repair-table .col-campus { width: 14%; }
   #repair-table .col-type { width: 9%; }
   #repair-table .col-status { width: 13%; }
   #repair-table .col-priority { width: 9%; }
-  #repair-table .col-assigned { width: 16%; }
+  #repair-table .col-assigned { width: 15%; }
+  .row-check { width: 15px; height: 15px; cursor: pointer; accent-color: var(--gold); }
+  #repair-table tbody tr.bulk-sel { background: rgba(232,170,69,0.07) !important; border-left: 2px solid var(--gold) !important; }
+
+  /* ── Bulk action bar ── */
+  .bulk-bar {
+    display: none; align-items: center; gap: 6px; flex-wrap: wrap;
+    background: rgba(232,170,69,0.07); border: 1px solid rgba(232,170,69,0.25);
+    border-radius: 4px; padding: 8px 12px; margin-bottom: 10px;
+  }
+  .bulk-bar.show { display: flex; }
+  .bulk-count { font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; color: var(--gold); letter-spacing: 0.05em; white-space: nowrap; margin-right: 6px; }
+  .bulk-apply { background: var(--gold); color: #000; border: none; border-radius: 4px; padding: 5px 16px; font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
+  .bulk-clear { background: none; border: 1px solid var(--border); border-radius: 4px; padding: 5px 12px; font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); cursor: pointer; }
+  .bulk-clear:hover { color: var(--text); border-color: var(--border2); }
   #repair-table td.item-name { font-size: 13px; font-weight: 600; color: #f0f0f0; line-height: 1.3; }
 
 
@@ -645,17 +660,39 @@
         oninput="setRFilter('search',this.value)" 
         style="background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px 12px;font-size:13px;width:100%;color:var(--text);" />
     </div>
+    <div id="bulk-bar" class="bulk-bar">
+      <span class="bulk-count" id="bulk-count">0 selected</span>
+      <select class="fs" id="bulk-campus">
+        <option value="">— Campus —</option>
+      </select>
+      <select class="fs" id="bulk-type">
+        <option value="">— Type —</option>
+        <option>Audio</option><option>Video</option><option>Lighting</option><option>Other</option>
+      </select>
+      <select class="fs" id="bulk-status">
+        <option value="">— Status —</option>
+        <option>Reported</option><option>Diagnosed</option><option>Parts Ordered</option>
+        <option>Out For Repair</option><option>Testing</option><option>Resolved</option>
+      </select>
+      <select class="fs" id="bulk-priority">
+        <option value="">— Priority —</option>
+        <option>Low</option><option>Medium</option><option>High</option><option>Critical</option>
+      </select>
+      <select class="fs" id="bulk-assigned"><option value="">— Assigned To —</option></select>
+      <button class="bulk-apply" onclick="applyBulkEdit()">Apply to Selected</button>
+      <button class="bulk-clear" onclick="clearBulkSelect()">Clear</button>
+    </div>
     <div class="table-wrap">
       <table id="repair-table">
         <thead>
           <tr>
+            <th class="col-check"><input type="checkbox" class="row-check" id="select-all-check" onchange="toggleSelectAll(this)" onclick="event.stopPropagation()" /></th>
             <th class="col-name" onclick="setRSort('name')">Equipment / Item</th>
             <th class="col-campus" onclick="setRSort('campus')">Campus</th>
             <th class="col-type" onclick="setRSort('type')">Type</th>
             <th class="col-status" onclick="setRSort('status')">Status</th>
             <th class="col-priority" onclick="setRSort('priority')">Priority</th>
             <th class="col-assigned" onclick="setRSort('assignee')">Assigned To</th>
-            
           </tr>
         </thead>
         <tbody id="repair-list"></tbody>
@@ -819,6 +856,7 @@ var STATUSES = ['Reported','Diagnosed','Parts Ordered','Out For Repair','Testing
 var repairs  = [];
 var projects = [];
 var users    = [];
+var selectedIds = new Set();
 var rFilter  = { cat:'all', campus:'all', status:'all', assignee:'all', search:'' };
 var rSort = 'newest';
 var pFilter  = 'all';
@@ -896,16 +934,16 @@ function showApp() {
 
 function applyRolePermissions() {
   var role = currentUser.role;
-  // Hide Capital Projects tab for general users
   var projectsTab = document.querySelector('.nav-btn[onclick*="projects"]');
   if (role === 'general') {
     if (projectsTab) projectsTab.style.display = 'none';
-    // Hide add buttons and delete for general
     document.querySelectorAll('.add-btn').forEach(function(b) { b.style.display = 'none'; });
   }
-  // Hide add/delete for general on repairs too
-  if (role === 'general') {
-    // Will be applied after render via renderRepairs override
+  if (role !== 'admin') {
+    // Hide bulk select column and bar for non-admins
+    var style = document.createElement('style');
+    style.textContent = '#repair-table .col-check { display: none; } #bulk-bar { display: none !important; }';
+    document.head.appendChild(style);
   }
 }
 
@@ -1293,6 +1331,67 @@ function populateUserDropdowns() {
     users.map(function(u){ return '<option value="'+esc(u.name)+'">'+esc(u.name)+'</option>'; }).join('');
   var el = document.getElementById('m-assigned');
   if (el) el.innerHTML = opts;
+  var ba = document.getElementById('bulk-assigned');
+  if (ba) ba.innerHTML = '<option value="">— Assigned To —</option>' +
+    users.map(function(u){ return '<option value="'+esc(u.name)+'">'+esc(u.name)+'</option>'; }).join('');
+  // Populate bulk campus dropdown
+  var bc = document.getElementById('bulk-campus');
+  if (bc) bc.innerHTML = '<option value="">— Campus —</option>' +
+    CAMPUSES.map(function(c){ return '<option value="'+esc(c)+'">'+esc(c)+'</option>'; }).join('');
+}
+
+function toggleSelect(id, e) {
+  e.stopPropagation();
+  if (selectedIds.has(id)) { selectedIds.delete(id); } else { selectedIds.add(id); }
+  updateBulkBar();
+  renderRepairs();
+}
+
+function toggleSelectAll(cb) {
+  document.querySelectorAll('#repair-list .row-check').forEach(function(el) {
+    if (cb.checked) { selectedIds.add(el.dataset.id); } else { selectedIds.delete(el.dataset.id); }
+  });
+  updateBulkBar();
+  renderRepairs();
+}
+
+function updateBulkBar() {
+  var bar = document.getElementById('bulk-bar');
+  var countEl = document.getElementById('bulk-count');
+  if (!bar) return;
+  if (selectedIds.size > 0 && currentUser && currentUser.role === 'admin') {
+    bar.classList.add('show');
+    countEl.textContent = selectedIds.size + ' item' + (selectedIds.size !== 1 ? 's' : '') + ' selected';
+  } else {
+    bar.classList.remove('show');
+  }
+}
+
+function clearBulkSelect() {
+  selectedIds.clear();
+  var allCheck = document.getElementById('select-all-check');
+  if (allCheck) allCheck.checked = false;
+  updateBulkBar();
+  renderRepairs();
+}
+
+function applyBulkEdit() {
+  var campus   = document.getElementById('bulk-campus').value;
+  var type     = document.getElementById('bulk-type').value;
+  var status   = document.getElementById('bulk-status').value;
+  var priority = document.getElementById('bulk-priority').value;
+  var assigned = document.getElementById('bulk-assigned').value;
+  var changes  = {};
+  if (campus)   changes.campus   = campus;
+  if (type)     changes.type     = type;
+  if (status)   changes.status   = status;
+  if (priority) changes.priority = priority;
+  if (assigned !== '') changes.assigned = assigned;
+  if (Object.keys(changes).length === 0) { toast('Select at least one field to change'); return; }
+  var ids = Array.from(selectedIds);
+  ids.forEach(function(id) { patchRepair(id, changes); });
+  toast(ids.length + ' item' + (ids.length !== 1 ? 's' : '') + ' updated');
+  clearBulkSelect();
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -1392,14 +1491,18 @@ function renderRepairs() {
     return;
   }
   list.innerHTML = data.map(function(r) {
-    return '<tr class="'+(selId===r.id?'sel':'')+'" onclick="showRepair(\''+r.id+'\')">'+
+    var isSel = selectedIds.has(r.id);
+    var rowClass = (selId===r.id?'sel':'') + (isSel?' bulk-sel':'');
+    return '<tr class="'+rowClass+'" onclick="showRepair(\''+r.id+'\')">'+
+      '<td class="col-check" onclick="event.stopPropagation()">'+
+        '<input type="checkbox" class="row-check" data-id="'+r.id+'" '+(isSel?'checked':'')+
+        ' onchange="toggleSelect(\''+r.id+'\',event)" onclick="event.stopPropagation()" /></td>'+
       '<td class="item-name col-name">'+esc(r.item)+'</td>'+
       '<td class="col-campus"><span class="b b-campus">'+esc(r.campus)+'</span></td>'+
       '<td class="col-type"><span class="b '+catClass(r.type)+'">'+r.type+'</span></td>'+
       '<td class="col-status"><span class="b b-status">'+r.status+'</span></td>'+
       '<td class="col-priority"><span class="b b-priority">'+r.priority+'</span></td>'+
       '<td class="col-assigned">'+esc(r.assigned||'—')+'</td>'+
-
       '</tr>';
   }).join('');
   if (countEl) countEl.textContent = 'Showing ' + data.length + ' of ' + repairs.length + ' items';
