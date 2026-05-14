@@ -36,6 +36,7 @@ function doPost(e) {
     else if (action === 'saveProject')   result = saveProject(payload.data);
     else if (action === 'updateProject') result = updateProject(payload.data);
     else if (action === 'deleteProject') result = deleteRow('Projects', payload.id);
+    else if (action === 'notifyBulk')   result = notifyBulk(payload.ids);
     else result = { error: 'Unknown action' };
   } catch(err) {
     result = { error: err.message };
@@ -201,9 +202,9 @@ function updateRepair(data) {
         return val === undefined || val === null ? '' : val;
       });
       sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
-      // Notify if assignee changed
+      // Notify only when the caller explicitly requests it
       var newAssigned = String(row[REPAIR_HEADERS.indexOf('assigned')] || '');
-      if (newAssigned && newAssigned !== oldAssigned) {
+      if (data.notifyAssignee && newAssigned) {
         var itemName = row[REPAIR_HEADERS.indexOf('item')];
         var campus   = row[REPAIR_HEADERS.indexOf('campus')];
         var type     = row[REPAIR_HEADERS.indexOf('type')];
@@ -255,6 +256,52 @@ function deleteRow(sheetName, id) {
     }
   }
   return { error: 'Record not found' };
+}
+
+// ── Bulk notify assignees ─────────────────────────────────────
+function notifyBulk(ids) {
+  if (!ids || !ids.length) return { success: true, count: 0 };
+  var sheet = getSheet('Repairs');
+  var vals  = sheet.getDataRange().getValues();
+
+  // Build map: assigneeName -> [ticket info, ...]
+  var assigneeTickets = {};
+  ids.forEach(function(rid) {
+    for (var i = 1; i < vals.length; i++) {
+      if (String(vals[i][0]) === String(rid)) {
+        var name = String(vals[i][REPAIR_HEADERS.indexOf('assigned')] || '').trim();
+        if (name) {
+          if (!assigneeTickets[name]) assigneeTickets[name] = [];
+          assigneeTickets[name].push({
+            item:     vals[i][REPAIR_HEADERS.indexOf('item')],
+            campus:   vals[i][REPAIR_HEADERS.indexOf('campus')],
+            priority: vals[i][REPAIR_HEADERS.indexOf('priority')],
+            status:   vals[i][REPAIR_HEADERS.indexOf('status')]
+          });
+        }
+        break;
+      }
+    }
+  });
+
+  var count = 0;
+  Object.keys(assigneeTickets).forEach(function(name) {
+    var email = getEmailByName(name);
+    if (!email) return;
+    var tickets  = assigneeTickets[name];
+    var itemList = tickets.map(function(t, i) {
+      return (i + 1) + '. ' + t.item + ' — ' + t.campus + ' | ' + t.priority + ' | ' + t.status;
+    }).join('\n');
+    var subject = 'Repair reminder: ' + tickets.length + ' ticket' + (tickets.length !== 1 ? 's' : '') + ' assigned to you';
+    var body = 'Hi ' + name + ',\n\n'
+      + 'Here\'s a reminder about your currently assigned repair ticket' + (tickets.length !== 1 ? 's' : '') + ':\n\n'
+      + itemList + '\n\n'
+      + 'View them here: https://cfproduction.github.io/cf-production-ops/\n\n'
+      + '— CF Production Ops';
+    try { GmailApp.sendEmail(email, subject, body); count++; } catch(e) {}
+  });
+
+  return { success: true, count: count };
 }
 
 function jsonResponse(obj) {

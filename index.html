@@ -495,8 +495,14 @@
   .bulk-bar.show { display: flex; }
   .bulk-count { font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; color: var(--gold); letter-spacing: 0.05em; white-space: nowrap; margin-right: 6px; }
   .bulk-apply { background: var(--gold); color: #000; border: none; border-radius: 4px; padding: 5px 16px; font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
+  .bulk-notify { background: none; border: 1px solid var(--blue); color: var(--blue); border-radius: 4px; padding: 5px 14px; font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: all 0.12s; white-space: nowrap; }
+  .bulk-notify:hover { background: rgba(91,155,213,0.12); }
   .bulk-clear { background: none; border: 1px solid var(--border); border-radius: 4px; padding: 5px 12px; font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); cursor: pointer; }
   .bulk-clear:hover { color: var(--text); border-color: var(--border2); }
+  .notify-chk-wrap { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 11px; color: var(--text2); font-family: 'Barlow Condensed', sans-serif; letter-spacing: 0.06em; cursor: pointer; user-select: none; }
+  .notify-chk-wrap input[type="checkbox"] { appearance: none; -webkit-appearance: none; width: 13px; height: 13px; background: var(--bg3); border: 1px solid var(--border2); border-radius: 2px; position: relative; cursor: pointer; transition: all 0.12s; flex-shrink: 0; }
+  .notify-chk-wrap input[type="checkbox"]:checked { background: var(--gold); border-color: var(--gold); }
+  .notify-chk-wrap input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 3px; top: 0px; width: 4px; height: 7px; border: 2px solid #000; border-top: none; border-left: none; transform: rotate(45deg); }
   #repair-table td.item-name { font-size: 13px; font-weight: 600; color: #f0f0f0; line-height: 1.3; }
 
 
@@ -696,6 +702,7 @@
       </select>
       <select class="fs" id="bulk-assigned"><option value="">— Assigned To —</option></select>
       <button class="bulk-apply" onclick="applyBulkEdit()">Apply to Selected</button>
+      <button class="bulk-notify" onclick="notifyBulkAssignees()">📧 Notify Assignees</button>
       <button class="bulk-clear" onclick="clearBulkSelect()">Clear</button>
     </div>
     <div class="table-wrap">
@@ -1655,10 +1662,12 @@ function showRepair(id) {
     pf('Reported', fmtDate(r.reported))+
     (canEdit?
       '<div class="pf"><div class="pf-label">Assigned To</div>'+
-      '<select class="inline-input" onchange="patchRepair(\''+id+'\',{assigned:this.value})">'+
+      '<select class="inline-input" id="assign-sel-'+id+'" onchange="patchRepairAssigned(\''+id+'\',this.value)">'+
       '<option value="" '+(r.assigned?'':'selected')+'>— Unassigned —</option>'+
       users.map(function(u){ return '<option value="'+esc(u.name)+'"'+(r.assigned===u.name?' selected':'')+'>'+esc(u.name)+'</option>'; }).join('')+
-      '</select></div>'
+      '</select>'+
+      '<label class="notify-chk-wrap"><input type="checkbox" id="notify-chk-'+id+'"> Notify assignee by email</label>'+
+      '</div>'
       : pf('Assigned To', r.assigned||'—'))+
     prioHtml+
     '<div class="pf"><div class="pf-label">Issue</div><div class="pf-val" style="font-size:13px;color:#888;">'+esc(r.desc)+'</div></div>'+
@@ -1703,11 +1712,36 @@ function advanceStatus(id, status) {
   patchRepair(id, { status: status });
 }
 
+function patchRepairAssigned(id, assigned) {
+  var chk = document.getElementById('notify-chk-' + id);
+  patchRepair(id, { assigned: assigned, notifyAssignee: !!(chk && chk.checked) });
+}
+
+function notifyBulkAssignees() {
+  var ids = Array.from(selectedIds);
+  if (!ids.length) { toast('No items selected'); return; }
+  var hasAssignee = ids.some(function(id) {
+    var r = repairs.find(function(x){ return x.id === id; });
+    return r && r.assigned;
+  });
+  if (!hasAssignee) { toast('None of the selected items have an assignee'); return; }
+  api({ action: 'notifyBulk', ids: ids }, function(res) {
+    if (res.error) { toast('Error: ' + res.error); return; }
+    toast('📧 Notified ' + res.count + ' assignee' + (res.count !== 1 ? 's' : ''));
+  });
+}
+
 function patchRepair(id, changes) {
   var r = repairs.find(function(x){ return x.id===id; });
   if (!r) return;
-  Object.assign(r, changes);
-  api({ action:'updateRepair', data: r }, function(res) {
+  // Strip notifyAssignee from local state — it's a send-time flag only
+  var notifyAssignee = changes.notifyAssignee;
+  var localChanges = {};
+  Object.keys(changes).forEach(function(k) { if (k !== 'notifyAssignee') localChanges[k] = changes[k]; });
+  Object.assign(r, localChanges);
+  var payload = Object.assign({}, r);
+  if (notifyAssignee !== undefined) payload.notifyAssignee = notifyAssignee;
+  api({ action:'updateRepair', data: payload }, function(res) {
     if (res.error) { toast('Error: '+res.error); return; }
     toast('Saved');
     renderRepairs();
