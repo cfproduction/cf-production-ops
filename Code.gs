@@ -194,14 +194,15 @@ function updateRepair(data) {
   var sheet = getSheet('Repairs');
   var vals  = sheet.getDataRange().getValues();
   for (var i = 1; i < vals.length; i++) {
-    if (vals[i][0] === data.id) {
-      var oldAssigned = vals[i][REPAIR_HEADERS.indexOf('assigned')];
+    if (String(vals[i][0]) === String(data.id)) {
+      var oldAssigned = String(vals[i][REPAIR_HEADERS.indexOf('assigned')] || '');
       var row = REPAIR_HEADERS.map(function(h) {
-        return data[h] !== undefined ? data[h] : vals[i][REPAIR_HEADERS.indexOf(h)];
+        var val = data[h] !== undefined ? data[h] : vals[i][REPAIR_HEADERS.indexOf(h)];
+        return val === undefined || val === null ? '' : val;
       });
       sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
       // Notify if assignee changed
-      var newAssigned = row[REPAIR_HEADERS.indexOf('assigned')];
+      var newAssigned = String(row[REPAIR_HEADERS.indexOf('assigned')] || '');
       if (newAssigned && newAssigned !== oldAssigned) {
         var itemName = row[REPAIR_HEADERS.indexOf('item')];
         var campus   = row[REPAIR_HEADERS.indexOf('campus')];
