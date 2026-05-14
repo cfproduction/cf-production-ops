@@ -873,6 +873,8 @@ var repairs  = [];
 var projects = [];
 var users    = [];
 var selectedIds = new Set();
+var lastClickedIdx = -1;
+var lastRenderedIds = [];
 var rFilter  = { cat:'all', campus:'all', status:'all', assignee:'all', search:'' };
 var rSort = 'newest';
 var pFilter  = 'all';
@@ -1356,6 +1358,13 @@ function populateUserDropdowns() {
     CAMPUSES.map(function(c){ return '<option value="'+esc(c)+'">'+esc(c)+'</option>'; }).join('');
 }
 
+function applyRowSelState(row, id) {
+  var cb = row.querySelector('.row-check');
+  var isSel = selectedIds.has(id);
+  if (cb) cb.checked = isSel;
+  if (isSel) { row.classList.add('bulk-sel'); } else { row.classList.remove('bulk-sel'); }
+}
+
 function toggleSelect(id, e) {
   e.stopPropagation();
   if (selectedIds.has(id)) { selectedIds.delete(id); } else { selectedIds.add(id); }
@@ -1534,20 +1543,50 @@ function renderRepairs() {
       '<td class="col-assigned">'+esc(r.assigned||'—')+'</td>'+
       '</tr>';
   }).join('');
-  // Event delegation for row clicks and checkbox changes
+  lastRenderedIds = data.map(function(r){ return r.id; });
+
+  // Event delegation: checkbox, Cmd+click, Shift+click, plain click
   list.onclick = function(e) {
-    var cb = e.target.closest('.row-check');
-    if (cb) {
-      var id = cb.dataset.id;
+    var row = e.target.closest('tr[data-repair-id]');
+    if (!row) return;
+    var id  = row.getAttribute('data-repair-id');
+    var idx = lastRenderedIds.indexOf(id);
+    var isAdmin = currentUser && currentUser.role === 'admin';
+
+    // Checkbox click — always toggles
+    if (e.target.closest('.col-check')) {
       if (selectedIds.has(id)) { selectedIds.delete(id); } else { selectedIds.add(id); }
-      cb.checked = selectedIds.has(id);
-      var row = cb.closest('tr');
-      if (row) { selectedIds.has(id) ? row.classList.add('bulk-sel') : row.classList.remove('bulk-sel'); }
+      applyRowSelState(row, id);
+      updateBulkBar();
+      lastClickedIdx = idx;
+      return;
+    }
+
+    // Cmd/Ctrl+Click — toggle individual (admin only)
+    if (isAdmin && (e.metaKey || e.ctrlKey)) {
+      if (selectedIds.has(id)) { selectedIds.delete(id); } else { selectedIds.add(id); }
+      applyRowSelState(row, id);
+      updateBulkBar();
+      lastClickedIdx = idx;
+      return;
+    }
+
+    // Shift+Click — range select (admin only)
+    if (isAdmin && e.shiftKey && lastClickedIdx !== -1) {
+      var from = Math.min(lastClickedIdx, idx);
+      var to   = Math.max(lastClickedIdx, idx);
+      lastRenderedIds.slice(from, to + 1).forEach(function(rid) {
+        selectedIds.add(rid);
+        var r = document.querySelector('tr[data-repair-id="'+rid+'"]');
+        if (r) applyRowSelState(r, rid);
+      });
       updateBulkBar();
       return;
     }
-    var row = e.target.closest('tr[data-repair-id]');
-    if (row) showRepair(row.getAttribute('data-repair-id'));
+
+    // Plain click — open ticket
+    lastClickedIdx = idx;
+    showRepair(id);
   };
   if (countEl) countEl.textContent = 'Showing ' + data.length + ' of ' + repairs.length + ' items';
 }
