@@ -114,7 +114,7 @@ function getEmailByName(name) {
   return null;
 }
 
-function notifyAssigned(assignedName, itemName, campus, type, priority, isNew) {
+function notifyAssigned(assignedName, itemName, campus, type, priority, isNew, repairId) {
   Logger.log('notifyAssigned called — name: ' + assignedName + ', item: ' + itemName);
   var email = getEmailByName(assignedName);
   Logger.log('Email lookup result: ' + email);
@@ -122,6 +122,8 @@ function notifyAssigned(assignedName, itemName, campus, type, priority, isNew) {
     Logger.log('ERROR: No email found for "' + assignedName + '" — check Users sheet spelling');
     return;
   }
+  var BASE = 'https://cfproduction.github.io/cf-production-ops/';
+  var link = repairId ? BASE + '#repair/' + repairId : BASE;
   var subject = isNew
     ? 'New repair assigned to you: ' + itemName
     : 'You have been assigned to a repair: ' + itemName;
@@ -131,7 +133,7 @@ function notifyAssigned(assignedName, itemName, campus, type, priority, isNew) {
     + 'Campus:   ' + campus + '\n'
     + 'Type:     ' + type + '\n'
     + 'Priority: ' + priority + '\n\n'
-    + 'View it here: https://cfproduction.github.io/cf-production-ops/\n\n'
+    + 'View ticket: ' + link + '\n\n'
     + '— CF Production Ops';
   try {
     GmailApp.sendEmail(email, subject, body, {
@@ -211,7 +213,7 @@ function saveRepair(data) {
   var row = REPAIR_HEADERS.map(function(h) { return data[h] || ''; });
   sheet.appendRow(row);
   if (data.assigned) {
-    notifyAssigned(data.assigned, data.item, data.campus, data.type, data.priority, true);
+    notifyAssigned(data.assigned, data.item, data.campus, data.type, data.priority, true, data.id);
   }
   return { success: true, id: data.id };
 }
@@ -235,7 +237,7 @@ function updateRepair(data) {
         var campus   = row[REPAIR_HEADERS.indexOf('campus')];
         var type     = row[REPAIR_HEADERS.indexOf('type')];
         var priority = row[REPAIR_HEADERS.indexOf('priority')];
-        notifyAssigned(newAssigned, itemName, campus, type, priority, false);
+        notifyAssigned(newAssigned, itemName, campus, type, priority, false, data.id);
       }
       return { success: true };
     }
@@ -296,7 +298,7 @@ function notifySingle(repairId) {
       var campus   = vals[i][REPAIR_HEADERS.indexOf('campus')];
       var type     = vals[i][REPAIR_HEADERS.indexOf('type')];
       var priority = vals[i][REPAIR_HEADERS.indexOf('priority')];
-      notifyAssigned(assignedName, itemName, campus, type, priority, false);
+      notifyAssigned(assignedName, itemName, campus, type, priority, false, repairId);
       return { success: true };
     }
   }
@@ -341,7 +343,7 @@ function notifyBulk(ids) {
     var body = 'Hi ' + name + ',\n\n'
       + 'Here\'s a reminder about your currently assigned repair ticket' + (tickets.length !== 1 ? 's' : '') + ':\n\n'
       + itemList + '\n\n'
-      + 'View them here: https://cfproduction.github.io/cf-production-ops/\n\n'
+      + 'View your tickets: https://cfproduction.github.io/cf-production-ops/?assignee=' + encodeURIComponent(name) + '\n\n'
       + '— CF Production Ops';
     try { GmailApp.sendEmail(email, subject, body, { from: 'engineering@christfellowship.church', name: 'CF Production Ops' }); count++; } catch(e) {}
   });

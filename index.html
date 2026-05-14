@@ -1347,6 +1347,21 @@ function loadAll() {
   api({ action:'getRepairs' }, function(res) {
     repairs = res.data || [];
     renderRepairs();
+    // Deep-link: #repair/ID opens that ticket directly
+    var hash = window.location.hash;
+    if (hash && hash.indexOf('#repair/') === 0) {
+      var deepId = hash.slice(8);
+      if (deepId) showRepair(deepId);
+    }
+    // Filter link: ?assignee=Name pre-filters the table
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var assigneeParam = params.get('assignee');
+      if (assigneeParam) {
+        rFilter.assignee = assigneeParam;
+        renderRepairs();
+      }
+    } catch(e) {}
     onBothLoaded();
   });
   api({ action:'getProjects' }, function(res) {
