@@ -503,6 +503,8 @@
   .notify-chk-wrap input[type="checkbox"] { appearance: none; -webkit-appearance: none; width: 13px; height: 13px; background: var(--bg3); border: 1px solid var(--border2); border-radius: 2px; position: relative; cursor: pointer; transition: all 0.12s; flex-shrink: 0; }
   .notify-chk-wrap input[type="checkbox"]:checked { background: var(--gold); border-color: var(--gold); }
   .notify-chk-wrap input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 3px; top: 0px; width: 4px; height: 7px; border: 2px solid #000; border-top: none; border-left: none; transform: rotate(45deg); }
+  .notify-btn { margin-top: 7px; background: none; border: 1px solid var(--border2); border-radius: 4px; padding: 5px 12px; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text2); cursor: pointer; transition: all 0.12s; }
+  .notify-btn:hover { border-color: var(--gold); color: var(--gold); }
   .panel-save-bar { display: none; align-items: center; justify-content: space-between; background: rgba(232,170,69,0.06); border: 1px solid rgba(232,170,69,0.25); border-radius: 6px; padding: 9px 14px; margin: 12px 0 4px; gap: 10px; }
   .panel-save-bar.show { display: flex; }
   .panel-unsaved-label { font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: var(--gold); }
@@ -1673,7 +1675,7 @@ function showRepair(id) {
       '<option value="" '+(r.assigned?'':'selected')+'>— Unassigned —</option>'+
       users.map(function(u){ return '<option value="'+esc(u.name)+'"'+(r.assigned===u.name?' selected':'')+'>'+esc(u.name)+'</option>'; }).join('')+
       '</select>'+
-      '<label class="notify-chk-wrap"><input type="checkbox" id="notify-chk-'+id+'"> Notify assignee by email</label>'+
+      (r.assigned ? '<button class="notify-btn" onclick="notifySingle(\''+id+'\')">📧 Notify '+esc(r.assigned)+'</button>' : '')+
       '</div>'
       : pf('Assigned To', r.assigned||'—'))+
     prioHtml+
@@ -1738,13 +1740,20 @@ function savePanel(id) {
   var assignSel = document.getElementById('assign-sel-' + id);
   var prioSel   = document.getElementById('prio-sel-'   + id);
   var notesTA   = document.getElementById('notes-ta-'   + id);
-  var notifyChk = document.getElementById('notify-chk-' + id);
   var changes = {};
-  if (assignSel) changes.assigned      = assignSel.value;
-  if (prioSel)   changes.priority      = prioSel.value;
-  if (notesTA)   changes.notes         = notesTA.value;
-  changes.notifyAssignee = !!(notifyChk && notifyChk.checked);
+  if (assignSel) changes.assigned  = assignSel.value;
+  if (prioSel)   changes.priority  = prioSel.value;
+  if (notesTA)   changes.notes     = notesTA.value;
   patchRepair(id, changes);
+}
+
+function notifySingle(id) {
+  var r = repairs.find(function(x){ return x.id === id; });
+  if (!r || !r.assigned) { toast('No assignee on this ticket'); return; }
+  api({ action: 'notifySingle', repairId: id }, function(res) {
+    if (res.error) { toast('Error: ' + res.error); return; }
+    toast('📧 Notified ' + r.assigned);
+  });
 }
 
 function notifyBulkAssignees() {

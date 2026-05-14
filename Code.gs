@@ -37,6 +37,7 @@ function doPost(e) {
     else if (action === 'updateProject') result = updateProject(payload.data);
     else if (action === 'deleteProject') result = deleteRow('Projects', payload.id);
     else if (action === 'notifyBulk')   result = notifyBulk(payload.ids);
+    else if (action === 'notifySingle') result = notifySingle(payload.repairId);
     else result = { error: 'Unknown action' };
   } catch(err) {
     result = { error: err.message };
@@ -277,6 +278,25 @@ function deleteRow(sheetName, id) {
     }
   }
   return { error: 'Record not found' };
+}
+
+// ── Single ticket notify ──────────────────────────────────────
+function notifySingle(repairId) {
+  var sheet = getSheet('Repairs');
+  var vals  = sheet.getDataRange().getValues();
+  for (var i = 1; i < vals.length; i++) {
+    if (String(vals[i][0]) === String(repairId)) {
+      var assignedName = String(vals[i][REPAIR_HEADERS.indexOf('assigned')] || '').trim();
+      if (!assignedName) return { error: 'No assignee on this ticket' };
+      var itemName = vals[i][REPAIR_HEADERS.indexOf('item')];
+      var campus   = vals[i][REPAIR_HEADERS.indexOf('campus')];
+      var type     = vals[i][REPAIR_HEADERS.indexOf('type')];
+      var priority = vals[i][REPAIR_HEADERS.indexOf('priority')];
+      notifyAssigned(assignedName, itemName, campus, type, priority, false);
+      return { success: true };
+    }
+  }
+  return { error: 'Repair not found' };
 }
 
 // ── Bulk notify assignees ─────────────────────────────────────
