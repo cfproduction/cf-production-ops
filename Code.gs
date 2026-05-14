@@ -134,7 +134,10 @@ function notifyAssigned(assignedName, itemName, campus, type, priority, isNew) {
     + 'View it here: https://cfproduction.github.io/cf-production-ops/\n\n'
     + '— CF Production Ops';
   try {
-    GmailApp.sendEmail(email, subject, body);
+    GmailApp.sendEmail(email, subject, body, {
+      from: 'engineering@christfellowship.church',
+      name: 'CF Production Ops'
+    });
     Logger.log('Email sent successfully to ' + email);
   } catch(e) {
     Logger.log('ERROR sending email: ' + e.message);
@@ -185,7 +188,8 @@ function addRepairComment(repairId, comment) {
                 GmailApp.sendEmail(
                   email,
                   'New comment on repair: ' + itemName,
-                  comment.author + ' commented on "' + itemName + '":\n\n"' + comment.text + '"\n\nView: https://cfproduction.github.io/cf-production-ops/'
+                  comment.author + ' commented on "' + itemName + '":\n\n"' + comment.text + '"\n\nView: https://cfproduction.github.io/cf-production-ops/',
+                  { from: 'engineering@christfellowship.church', name: 'CF Production Ops' }
                 );
               } catch(emailErr) {}
             }
@@ -339,7 +343,7 @@ function notifyBulk(ids) {
       + itemList + '\n\n'
       + 'View them here: https://cfproduction.github.io/cf-production-ops/\n\n'
       + '— CF Production Ops';
-    try { GmailApp.sendEmail(email, subject, body); count++; } catch(e) {}
+    try { GmailApp.sendEmail(email, subject, body, { from: 'engineering@christfellowship.church', name: 'CF Production Ops' }); count++; } catch(e) {}
   });
 
   return { success: true, count: count };
