@@ -101,6 +101,34 @@ function getUsers() {
   return { data: sheetToObjects(getSheet('Users'), USER_HEADERS) };
 }
 
+function getEmailByName(name) {
+  if (!name) return null;
+  var userData = getSheet('Users').getDataRange().getValues();
+  for (var i = 1; i < userData.length; i++) {
+    if (String(userData[i][1]).toLowerCase().trim() === String(name).toLowerCase().trim()) {
+      return userData[i][0] || null;
+    }
+  }
+  return null;
+}
+
+function notifyAssigned(assignedName, itemName, campus, type, priority, isNew) {
+  var email = getEmailByName(assignedName);
+  if (!email) return;
+  var subject = isNew
+    ? 'New repair assigned to you: ' + itemName
+    : 'You have been assigned to a repair: ' + itemName;
+  var body = 'Hi ' + assignedName + ',\n\n'
+    + (isNew ? 'A new repair ticket has been assigned to you.' : 'You have been assigned to an existing repair ticket.') + '\n\n'
+    + 'Item:     ' + itemName + '\n'
+    + 'Campus:   ' + campus + '\n'
+    + 'Type:     ' + type + '\n'
+    + 'Priority: ' + priority + '\n\n'
+    + 'View it here: https://cfproduction.github.io/cf-production-ops/\n\n'
+    + '— CF Production Ops';
+  try { GmailApp.sendEmail(email, subject, body); } catch(e) {}
+}
+
 function getRepairs() {
   return { data: sheetToObjects(getSheet('Repairs'), REPAIR_HEADERS) };
 }
@@ -156,6 +184,9 @@ function saveRepair(data) {
   data.status   = data.status || 'Reported';
   var row = REPAIR_HEADERS.map(function(h) { return data[h] || ''; });
   sheet.appendRow(row);
+  if (data.assigned) {
+    notifyAssigned(data.assigned, data.item, data.campus, data.type, data.priority, true);
+  }
   return { success: true, id: data.id };
 }
 
@@ -164,10 +195,20 @@ function updateRepair(data) {
   var vals  = sheet.getDataRange().getValues();
   for (var i = 1; i < vals.length; i++) {
     if (vals[i][0] === data.id) {
+      var oldAssigned = vals[i][REPAIR_HEADERS.indexOf('assigned')];
       var row = REPAIR_HEADERS.map(function(h) {
         return data[h] !== undefined ? data[h] : vals[i][REPAIR_HEADERS.indexOf(h)];
       });
       sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
+      // Notify if assignee changed
+      var newAssigned = row[REPAIR_HEADERS.indexOf('assigned')];
+      if (newAssigned && newAssigned !== oldAssigned) {
+        var itemName = row[REPAIR_HEADERS.indexOf('item')];
+        var campus   = row[REPAIR_HEADERS.indexOf('campus')];
+        var type     = row[REPAIR_HEADERS.indexOf('type')];
+        var priority = row[REPAIR_HEADERS.indexOf('priority')];
+        notifyAssigned(newAssigned, itemName, campus, type, priority, false);
+      }
       return { success: true };
     }
   }
