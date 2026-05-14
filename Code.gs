@@ -114,8 +114,13 @@ function getEmailByName(name) {
 }
 
 function notifyAssigned(assignedName, itemName, campus, type, priority, isNew) {
+  Logger.log('notifyAssigned called — name: ' + assignedName + ', item: ' + itemName);
   var email = getEmailByName(assignedName);
-  if (!email) return;
+  Logger.log('Email lookup result: ' + email);
+  if (!email) {
+    Logger.log('ERROR: No email found for "' + assignedName + '" — check Users sheet spelling');
+    return;
+  }
   var subject = isNew
     ? 'New repair assigned to you: ' + itemName
     : 'You have been assigned to a repair: ' + itemName;
@@ -127,7 +132,22 @@ function notifyAssigned(assignedName, itemName, campus, type, priority, isNew) {
     + 'Priority: ' + priority + '\n\n'
     + 'View it here: https://cfproduction.github.io/cf-production-ops/\n\n'
     + '— CF Production Ops';
-  try { GmailApp.sendEmail(email, subject, body); } catch(e) {}
+  try {
+    GmailApp.sendEmail(email, subject, body);
+    Logger.log('Email sent successfully to ' + email);
+  } catch(e) {
+    Logger.log('ERROR sending email: ' + e.message);
+  }
+}
+
+// ── Quick test — run this in the Apps Script editor to verify email ──
+function testNotifyAssigned() {
+  // Change these to match a real name in your Users sheet and confirm the email arrives
+  var testName = 'Yoel Torres';
+  var testItem = 'Test Repair Item';
+  Logger.log('=== testNotifyAssigned START ===');
+  notifyAssigned(testName, testItem, 'Palm Beach Gardens', 'Audio', 'High', false);
+  Logger.log('=== testNotifyAssigned END ===');
 }
 
 function getRepairs() {
@@ -204,6 +224,7 @@ function updateRepair(data) {
       sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
       // Notify only when the caller explicitly requests it
       var newAssigned = String(row[REPAIR_HEADERS.indexOf('assigned')] || '');
+      Logger.log('updateRepair — notifyAssignee flag: ' + data.notifyAssignee + ', assigned: ' + newAssigned);
       if (data.notifyAssignee && newAssigned) {
         var itemName = row[REPAIR_HEADERS.indexOf('item')];
         var campus   = row[REPAIR_HEADERS.indexOf('campus')];
