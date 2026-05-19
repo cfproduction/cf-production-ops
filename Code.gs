@@ -3,7 +3,7 @@
 //  Paste this entire file into your Apps Script editor
 // ============================================================
 
-var REPAIR_HEADERS  = ['id','campus','type','item','serial','priority','desc','assigned','status','reported','notes','comments'];
+var REPAIR_HEADERS  = ['id','campus','type','item','serial','priority','desc','assigned','status','reported','notes','comments','files'];
 var PROJECT_HEADERS = ['id','name','campus','category','budget','requestedBy','desc','status','progress','notes'];
 var USER_HEADERS    = ['email','name','role'];  // role: admin | operator | general
 
@@ -38,6 +38,7 @@ function doPost(e) {
     else if (action === 'deleteProject') result = deleteRow('Projects', payload.id);
     else if (action === 'notifyBulk')   result = notifyBulk(payload.ids);
     else if (action === 'notifySingle') result = notifySingle(payload.repairId, payload.assignedName);
+    else if (action === 'uploadFile')   result = uploadFile(payload.fileName, payload.mimeType, payload.data);
     else result = { error: 'Unknown action' };
   } catch(err) {
     result = { error: err.message };
@@ -284,6 +285,23 @@ function deleteRow(sheetName, id) {
     }
   }
   return { error: 'Record not found' };
+}
+
+// ── File upload to Google Drive ──────────────────────────────
+function uploadFile(fileName, mimeType, base64Data) {
+  try {
+    var folders = DriveApp.getFoldersByName('CF Production Ops Uploads');
+    var folder  = folders.hasNext() ? folders.next() : DriveApp.createFolder('CF Production Ops Uploads');
+    var blob    = Utilities.newBlob(Utilities.base64Decode(base64Data), mimeType, fileName);
+    var file    = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    var id    = file.getId();
+    var url   = 'https://drive.google.com/uc?export=view&id=' + id;
+    var thumb = 'https://drive.google.com/thumbnail?id=' + id + '&sz=w600';
+    return { success: true, url: url, thumb: thumb };
+  } catch(e) {
+    return { error: e.message };
+  }
 }
 
 // ── Single ticket notify ──────────────────────────────────────
