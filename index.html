@@ -892,6 +892,19 @@ var selectedIds = new Set();
 var lastClickedIdx = -1;
 var lastRenderedIds = [];
 var rFilter  = { cat:'all', campus:'all', status:'all', assignee:'all', search:'' };
+
+// Capture deep-link intent immediately on script parse, before any auth flow
+var _deepRepairId    = null;
+var _deepAssignee    = null;
+(function() {
+  var h = window.location.hash;
+  if (h && h.indexOf('#repair/') === 0) { _deepRepairId = h.slice(8) || null; }
+  try {
+    var p = new URLSearchParams(window.location.search);
+    var a = p.get('assignee');
+    if (a) _deepAssignee = a;
+  } catch(e) {}
+})();
 var rSort = 'newest';
 var pFilter  = 'all';
 var selId    = null;
@@ -1347,21 +1360,14 @@ function loadAll() {
   api({ action:'getRepairs' }, function(res) {
     repairs = res.data || [];
     renderRepairs();
-    // Deep-link: #repair/ID opens that ticket directly
-    var hash = window.location.hash;
-    if (hash && hash.indexOf('#repair/') === 0) {
-      var deepId = hash.slice(8);
-      if (deepId) showRepair(deepId);
+    // Apply deep-link intent captured on page load
+    if (_deepRepairId) {
+      var _id = _deepRepairId; _deepRepairId = null;
+      showRepair(_id);
+    } else if (_deepAssignee) {
+      rFilter.assignee = _deepAssignee; _deepAssignee = null;
+      renderRepairs();
     }
-    // Filter link: ?assignee=Name pre-filters the table
-    try {
-      var params = new URLSearchParams(window.location.search);
-      var assigneeParam = params.get('assignee');
-      if (assigneeParam) {
-        rFilter.assignee = assigneeParam;
-        renderRepairs();
-      }
-    } catch(e) {}
     onBothLoaded();
   });
   api({ action:'getProjects' }, function(res) {
@@ -1686,11 +1692,11 @@ function showRepair(id) {
     pf('Reported', fmtDate(r.reported))+
     (canEdit?
       '<div class="pf"><div class="pf-label">Assigned To</div>'+
-      '<select class="inline-input" id="assign-sel-'+id+'" onchange="markPanelDirty(\''+id+'\')">'+
+      '<select class="inline-input" id="assign-sel-'+id+'" onchange="markPanelDirty(\''+id+'\'); updateNotifyBtn(\''+id+'\',this.value)">'+
       '<option value="" '+(r.assigned?'':'selected')+'>— Unassigned —</option>'+
       users.map(function(u){ return '<option value="'+esc(u.name)+'"'+(r.assigned===u.name?' selected':'')+'>'+esc(u.name)+'</option>'; }).join('')+
       '</select>'+
-      (r.assigned ? '<button class="notify-btn" onclick="notifySingle(\''+id+'\')">📧 Notify '+esc(r.assigned)+'</button>' : '')+
+      '<button class="notify-btn" id="notify-btn-'+id+'" onclick="notifyCurrentAssignee(\''+id+'\')" style="'+(r.assigned?'':'display:none')+'">📧 Notify <span id="notify-name-'+id+'">'+esc(r.assigned||'')+'</span></button>'+
       '</div>'
       : pf('Assigned To', r.assigned||'—'))+
     prioHtml+
@@ -1762,12 +1768,21 @@ function savePanel(id) {
   patchRepair(id, changes);
 }
 
-function notifySingle(id) {
-  var r = repairs.find(function(x){ return x.id === id; });
-  if (!r || !r.assigned) { toast('No assignee on this ticket'); return; }
-  api({ action: 'notifySingle', repairId: id }, function(res) {
+function updateNotifyBtn(id, name) {
+  var btn  = document.getElementById('notify-btn-' + id);
+  var span = document.getElementById('notify-name-' + id);
+  if (!btn) return;
+  if (name) { btn.style.display = ''; if (span) span.textContent = name; }
+  else       { btn.style.display = 'none'; }
+}
+
+function notifyCurrentAssignee(id) {
+  var sel  = document.getElementById('assign-sel-' + id);
+  var name = sel ? sel.value : '';
+  if (!name) { toast('No assignee selected'); return; }
+  api({ action: 'notifySingle', repairId: id, assignedName: name }, function(res) {
     if (res.error) { toast('Error: ' + res.error); return; }
-    toast('📧 Notified ' + r.assigned);
+    toast('📧 Notified ' + name);
   });
 }
 

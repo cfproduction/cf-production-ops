@@ -37,7 +37,7 @@ function doPost(e) {
     else if (action === 'updateProject') result = updateProject(payload.data);
     else if (action === 'deleteProject') result = deleteRow('Projects', payload.id);
     else if (action === 'notifyBulk')   result = notifyBulk(payload.ids);
-    else if (action === 'notifySingle') result = notifySingle(payload.repairId);
+    else if (action === 'notifySingle') result = notifySingle(payload.repairId, payload.assignedName);
     else result = { error: 'Unknown action' };
   } catch(err) {
     result = { error: err.message };
@@ -287,12 +287,14 @@ function deleteRow(sheetName, id) {
 }
 
 // ── Single ticket notify ──────────────────────────────────────
-function notifySingle(repairId) {
+function notifySingle(repairId, assignedNameOverride) {
   var sheet = getSheet('Repairs');
   var vals  = sheet.getDataRange().getValues();
   for (var i = 1; i < vals.length; i++) {
     if (String(vals[i][0]) === String(repairId)) {
-      var assignedName = String(vals[i][REPAIR_HEADERS.indexOf('assigned')] || '').trim();
+      var assignedName = assignedNameOverride
+        ? String(assignedNameOverride).trim()
+        : String(vals[i][REPAIR_HEADERS.indexOf('assigned')] || '').trim();
       if (!assignedName) return { error: 'No assignee on this ticket' };
       var itemName = vals[i][REPAIR_HEADERS.indexOf('item')];
       var campus   = vals[i][REPAIR_HEADERS.indexOf('campus')];
