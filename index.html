@@ -881,7 +881,13 @@
 <!-- Image lightbox -->
 <div id="lightbox" onclick="closeLightbox()">
   <button id="lightbox-close" onclick="closeLightbox()">×</button>
-  <img id="lightbox-img" src="" alt="" />
+  <div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+    <img id="lightbox-img" src="" alt="" />
+    <a id="lightbox-fullsize" href="" target="_blank" onclick="event.stopPropagation()"
+       style="display:none;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#e8aa45;text-decoration:none;border:1px solid #e8aa45;border-radius:4px;padding:6px 16px;">
+      ↗ Open Full Size
+    </a>
+  </div>
 </div>
 
 <script>
@@ -1116,10 +1122,21 @@ async function uploadFiles(repairId) {
 
     if (isImg) {
       try {
-        // 250px max keeps base64 well under the 50k Google Sheets cell limit
-        var thumb = await resizeImage(file, 250, 0.65);
-        if (thumb.length > 48000) { toast('Image too large to store, try a smaller file'); continue; }
-        files.push({ name: file.name, type: file.type, thumb: thumb });
+        // Small thumbnail for panel display (stays under Sheets cell limit)
+        var thumb = await resizeImage(file, 220, 0.6);
+        if (thumb.length > 48000) { toast('Image too large, try a smaller file'); continue; }
+        // Full-size version uploaded to Drive for readable lightbox view
+        var fullB64 = await resizeImage(file, 1200, 0.85);
+        var driveUrl = '';
+        try {
+          var dresp = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action:'uploadFile', fileName: file.name, mimeType:'image/jpeg', data: fullB64.split(',')[1] })
+          });
+          var djson = await dresp.json();
+          if (djson.url) driveUrl = djson.url;
+        } catch(e) {}
+        files.push({ name: file.name, type: file.type, thumb: thumb, driveUrl: driveUrl });
         toast('Uploaded: ' + file.name);
       } catch(imgErr) { toast('Image error: ' + imgErr.message); continue; }
     } else {
@@ -1952,7 +1969,17 @@ function openLightbox(repairId, fileIndex) {
   var files = parseFiles(r.files || '');
   var f = files[fileIndex];
   if (!f) return;
-  document.getElementById('lightbox-img').src = f.thumb || f.url || '';
+  document.getElementById('lightbox-img').src = f.thumb || '';
+  // Show/hide full-size link
+  var fsLink = document.getElementById('lightbox-fullsize');
+  if (fsLink) {
+    if (f.driveUrl) {
+      fsLink.href = f.driveUrl;
+      fsLink.style.display = 'inline-block';
+    } else {
+      fsLink.style.display = 'none';
+    }
+  }
   document.getElementById('lightbox').style.display = 'flex';
   document.addEventListener('keydown', _lbKey);
 }

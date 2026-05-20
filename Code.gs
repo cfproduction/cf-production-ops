@@ -315,7 +315,7 @@ function uploadFile(fileName, mimeType, base64Data) {
     var folder  = folders.hasNext() ? folders.next() : DriveApp.createFolder('CF Production Ops Uploads');
     var blob    = Utilities.newBlob(Utilities.base64Decode(base64Data), mimeType, fileName);
     var file    = folder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    file.setSharing(DriveApp.Access.DOMAIN, DriveApp.Permission.VIEW);
     var id    = file.getId();
     // lh3 CDN URL embeds reliably in <img> tags for publicly shared Drive files
     var url   = 'https://lh3.googleusercontent.com/d/' + id;
