@@ -165,8 +165,10 @@ function testUploadFile() {
     var result = uploadFile('test-image.png', 'image/png', testBase64);
     Logger.log('Result: ' + JSON.stringify(result));
     if (result.url) {
-      Logger.log('SUCCESS — file URL: ' + result.url);
-      Logger.log('Check Google Drive for "CF Production Ops Uploads" folder');
+      Logger.log('SUCCESS');
+      Logger.log('URL: ' + result.url);
+      Logger.log('Thumb: ' + result.thumb);
+      Logger.log('Open this URL in your browser to confirm it loads: ' + result.url);
     } else {
       Logger.log('FAILED — ' + result.error);
     }
@@ -315,10 +317,13 @@ function uploadFile(fileName, mimeType, base64Data) {
     var file    = folder.createFile(blob);
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     var id    = file.getId();
-    var url   = 'https://drive.google.com/uc?export=view&id=' + id;
-    var thumb = 'https://drive.google.com/thumbnail?id=' + id + '&sz=w600';
-    return { success: true, url: url, thumb: thumb };
+    // lh3 CDN URL embeds reliably in <img> tags for publicly shared Drive files
+    var url   = 'https://lh3.googleusercontent.com/d/' + id;
+    var thumb = 'https://lh3.googleusercontent.com/d/' + id + '=w600';
+    Logger.log('Uploaded: ' + fileName + ' | id: ' + id + ' | sharing: ' + file.getSharingAccess());
+    return { success: true, url: url, thumb: thumb, id: id };
   } catch(e) {
+    Logger.log('uploadFile ERROR: ' + e.message);
     return { error: e.message };
   }
 }
