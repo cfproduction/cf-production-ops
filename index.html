@@ -1077,43 +1077,66 @@ function parseFiles(raw) {
   try { return JSON.parse(raw); } catch(e) { return []; }
 }
 
+// Resize an image File to a max dimension using Canvas, returns base64 data URL
+function resizeImage(file, maxPx, quality) {
+  return new Promise(function(resolve) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = new Image();
+      img.onload = function() {
+        var ratio  = Math.min(maxPx / img.width, maxPx / img.height, 1);
+        var canvas = document.createElement('canvas');
+        canvas.width  = Math.round(img.width  * ratio);
+        canvas.height = Math.round(img.height * ratio);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 async function uploadFiles(repairId) {
   var input = document.getElementById('file-upload-'+repairId);
   if (!input || !input.files.length) return;
   var r = repairs.find(function(x){ return x.id===repairId; });
   if (!r) return;
-  toast('Uploading files...');
   var files = parseFiles(r.files||'');
+
   for (var i = 0; i < input.files.length; i++) {
-    var file = input.files[i];
-    var reader = new FileReader();
-    await new Promise(function(resolve) {
-      reader.onload = async function(e) {
-        var base64 = e.target.result.split(',')[1];
-        try {
-          var res = await fetch(SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-              action: 'uploadFile',
-              repairId: repairId,
-              campus: r.campus,
-              type: r.type,
-              fileName: file.name,
-              mimeType: file.type,
-              data: base64
-            })
-          });
-          var json = await res.json();
-          if (json.url) {
-            files.push({ name: file.name, url: json.url, thumb: json.thumb||json.url, type: file.type });
-            toast('Uploaded: ' + file.name);
-          }
-        } catch(err) { toast('Upload failed: ' + err.message); }
-        resolve();
-      };
-      reader.readAsDataURL(file);
-    });
+    var file   = input.files[i];
+    var isImg  = file.type && file.type.indexOf('image/') === 0;
+    toast('Uploading ' + file.name + '…');
+
+    if (isImg) {
+      // Resize to 600px max — stored as base64, displays anywhere without Drive auth
+      var thumb = await resizeImage(file, 600, 0.72);
+      files.push({ name: file.name, type: file.type, thumb: thumb, url: thumb });
+      toast('Uploaded: ' + file.name);
+    } else {
+      // Non-image: upload to Drive, store as link
+      var reader = new FileReader();
+      var b64 = await new Promise(function(res) {
+        reader.onload = function(e) { res(e.target.result.split(',')[1]); };
+        reader.readAsDataURL(file);
+      });
+      try {
+        var resp = await fetch(SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action:'uploadFile', fileName:file.name, mimeType:file.type, data:b64 })
+        });
+        var json = await resp.json();
+        if (json.url) {
+          files.push({ name: file.name, type: file.type, url: json.url });
+          toast('Uploaded: ' + file.name);
+        } else {
+          toast('Upload failed: ' + (json.error || 'unknown error'));
+        }
+      } catch(err) { toast('Upload failed: ' + err.message); }
+    }
   }
+
   r.files = JSON.stringify(files);
   patchRepair(repairId, { files: r.files });
   showRepair(repairId);
@@ -1687,8 +1710,9 @@ function showRepair(id) {
   var filesHtml = files.length ? '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">'+files.map(function(f){
     var isImg = f.type && f.type.indexOf('image/') === 0;
     if (isImg) {
-      return '<div onclick="openLightbox(\''+f.url+'\')" title="'+esc(f.name)+'" style="cursor:zoom-in;position:relative;width:90px;height:90px;border-radius:5px;overflow:hidden;border:1px solid var(--border2);flex-shrink:0;">'+
-        '<img src="'+(f.thumb||f.url)+'" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.parentElement.innerHTML=\'<div style=\\\"display:flex;align-items:center;justify-content:center;height:100%;font-size:22px;\\\">🖼</div>\'" />'+
+      var src = f.thumb || f.url;
+      return '<div onclick="openLightbox(\''+encodeURIComponent(src)+'\')" title="'+esc(f.name)+'" style="cursor:zoom-in;position:relative;width:90px;height:90px;border-radius:5px;overflow:hidden;border:1px solid var(--border2);flex-shrink:0;">'+
+        '<img src="'+src+'" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.parentElement.innerHTML=\'<div style=\\\"display:flex;align-items:center;justify-content:center;height:100%;font-size:22px;\\\">🖼</div>\'" />'+
         '<div style="position:absolute;inset:0;background:rgba(0,0,0,0);transition:background 0.15s;" onmouseover="this.style.background=\'rgba(0,0,0,0.3)\'" onmouseout="this.style.background=\'rgba(0,0,0,0)\'"></div>'+
         '</div>';
     }
@@ -1903,7 +1927,7 @@ function patchProject(id, changes) {
 // ── Panel open/close ──────────────────────────────────────────
 function openLightbox(url) {
   var lb = document.getElementById('lightbox');
-  document.getElementById('lightbox-img').src = url;
+  document.getElementById('lightbox-img').src = decodeURIComponent(url);
   lb.style.display = 'flex';
   document.addEventListener('keydown', _lbKey);
 }
