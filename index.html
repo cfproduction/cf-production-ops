@@ -1717,13 +1717,17 @@ function showRepair(id) {
   var files = parseFiles(r.files||'');
   var filesHtml = files.length ? '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">'+files.map(function(f, fi){
     var isImg = f.type && f.type.indexOf('image/') === 0;
+    var delBtn = canEdit ? '<button onclick="event.stopPropagation();deleteFile(\''+id+'\','+fi+')" title="Remove" style="position:absolute;top:3px;right:3px;z-index:3;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,0.75);border:none;color:#fff;font-size:12px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">×</button>' : '';
     if (isImg) {
-      return '<div onclick="openLightbox(\''+id+'\','+fi+')" title="'+esc(f.name)+'" style="cursor:zoom-in;position:relative;width:90px;height:90px;border-radius:5px;overflow:hidden;border:1px solid var(--border2);flex-shrink:0;">'+
-        '<img src="'+f.thumb+'" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.parentElement.innerHTML=\'<div style=\\\"display:flex;align-items:center;justify-content:center;height:100%;font-size:22px;\\\">🖼</div>\'" />'+
-        '<div style="position:absolute;inset:0;background:rgba(0,0,0,0);transition:background 0.15s;" onmouseover="this.style.background=\'rgba(0,0,0,0.3)\'" onmouseout="this.style.background=\'rgba(0,0,0,0)\'"></div>'+
-        '</div>';
+      return '<div style="position:relative;flex-shrink:0;">'+
+        '<div onclick="openLightbox(\''+id+'\','+fi+')" title="'+esc(f.name)+'" style="cursor:zoom-in;width:90px;height:90px;border-radius:5px;overflow:hidden;border:1px solid var(--border2);">'+
+        '<img src="'+(f.thumb||'')+'" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.parentElement.innerHTML=\'<div style=\\\"display:flex;align-items:center;justify-content:center;height:100%;font-size:22px;\\\">🖼</div>\'" />'+
+        '</div>'+delBtn+'</div>';
     }
-    return '<a href="'+f.url+'" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:4px 10px;font-size:11px;color:#5b9bd5;text-decoration:none;font-family:Barlow Condensed,sans-serif;font-weight:600;letter-spacing:0.05em;align-self:center;">📎 '+esc(f.name)+'</a>';
+    if (!f.url) return ''; // skip broken entries
+    var fileDelBtn = canEdit ? '<button onclick="deleteFile(\''+id+'\','+fi+')" title="Remove" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 2px;line-height:1;">×</button>' : '';
+    return '<div style="display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:4px 8px;font-size:11px;font-family:Barlow Condensed,sans-serif;font-weight:600;letter-spacing:0.05em;align-self:center;">'+
+      '<a href="'+f.url+'" target="_blank" style="color:#5b9bd5;text-decoration:none;">📎 '+esc(f.name)+'</a>'+fileDelBtn+'</div>';
   }).join('')+'</div>' : '';
 
   var canEdit = currentUser && (currentUser.role === 'admin' || currentUser.role === 'operator');
@@ -1932,6 +1936,16 @@ function patchProject(id, changes) {
 }
 
 // ── Panel open/close ──────────────────────────────────────────
+function deleteFile(repairId, fileIndex) {
+  var r = repairs.find(function(x){ return x.id === repairId; });
+  if (!r) return;
+  var files = parseFiles(r.files || '');
+  files.splice(fileIndex, 1);
+  r.files = JSON.stringify(files);
+  patchRepair(repairId, { files: r.files });
+  showRepair(repairId);
+}
+
 function openLightbox(repairId, fileIndex) {
   var r = repairs.find(function(x){ return x.id === repairId; });
   if (!r) return;
