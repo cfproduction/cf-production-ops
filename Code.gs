@@ -149,12 +149,31 @@ function notifyAssigned(assignedName, itemName, campus, type, priority, isNew, r
 
 // ── Quick test — run this in the Apps Script editor to verify email ──
 function testNotifyAssigned() {
-  // Change these to match a real name in your Users sheet and confirm the email arrives
   var testName = 'Yoel Torres';
   var testItem = 'Test Repair Item';
   Logger.log('=== testNotifyAssigned START ===');
   notifyAssigned(testName, testItem, 'Palm Beach Gardens', 'Audio', 'High', false);
   Logger.log('=== testNotifyAssigned END ===');
+}
+
+// ── Test file upload + Drive access ──────────────────────────
+function testUploadFile() {
+  Logger.log('=== testUploadFile START ===');
+  try {
+    // Create a tiny 1x1 white PNG as base64 to test Drive access
+    var testBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==';
+    var result = uploadFile('test-image.png', 'image/png', testBase64);
+    Logger.log('Result: ' + JSON.stringify(result));
+    if (result.url) {
+      Logger.log('SUCCESS — file URL: ' + result.url);
+      Logger.log('Check Google Drive for "CF Production Ops Uploads" folder');
+    } else {
+      Logger.log('FAILED — ' + result.error);
+    }
+  } catch(e) {
+    Logger.log('ERROR: ' + e.message);
+  }
+  Logger.log('=== testUploadFile END ===');
 }
 
 function getRepairs() {
