@@ -1122,21 +1122,26 @@ async function uploadFiles(repairId) {
 
     if (isImg) {
       try {
-        // Small thumbnail for panel display (stays under Sheets cell limit)
-        var thumb = await resizeImage(file, 220, 0.6);
-        if (thumb.length > 48000) { toast('Image too large, try a smaller file'); continue; }
-        // Full-size version uploaded to Drive for readable lightbox view
-        var fullB64 = await resizeImage(file, 1200, 0.85);
+        // Thumbnail for panel (small, fits in Sheets cell)
+        var thumb = await resizeImage(file, 300, 0.65);
+        if (thumb.length > 48000) { toast('Image too large to store, try a smaller photo'); continue; }
+        // Full-size upload to Drive for readable lightbox link
         var driveUrl = '';
+        var driveFileId = '';
         try {
+          var fullB64 = await resizeImage(file, 1600, 0.88);
           var dresp = await fetch(SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({ action:'uploadFile', fileName: file.name, mimeType:'image/jpeg', data: fullB64.split(',')[1] })
           });
           var djson = await dresp.json();
-          if (djson.url) driveUrl = djson.url;
-        } catch(e) {}
-        files.push({ name: file.name, type: file.type, thumb: thumb, driveUrl: driveUrl });
+          if (djson.fileId) {
+            driveFileId = djson.fileId;
+            driveUrl = 'https://drive.google.com/file/d/' + djson.fileId + '/view';
+          }
+          if (djson.error) console.warn('Drive upload error:', djson.error);
+        } catch(e) { console.warn('Drive upload failed:', e); }
+        files.push({ name: file.name, type: file.type, thumb: thumb, driveUrl: driveUrl, fileId: driveFileId });
         toast('Uploaded: ' + file.name);
       } catch(imgErr) { toast('Image error: ' + imgErr.message); continue; }
     } else {
@@ -1152,8 +1157,9 @@ async function uploadFiles(repairId) {
           body: JSON.stringify({ action:'uploadFile', fileName:file.name, mimeType:file.type, data:b64 })
         });
         var json = await resp.json();
-        if (json.url) {
-          files.push({ name: file.name, type: file.type, url: json.url });
+        if (json.fileId) {
+          var fUrl = 'https://drive.google.com/file/d/' + json.fileId + '/view';
+          files.push({ name: file.name, type: file.type, url: fUrl, fileId: json.fileId });
           toast('Uploaded: ' + file.name);
         } else {
           toast('Upload failed: ' + (json.error || 'unknown error'));
@@ -1696,6 +1702,8 @@ function showRepair(id) {
   if (!r) return;
   selId = id;
   renderRepairs();
+  var canEdit   = currentUser && (currentUser.role === 'admin' || currentUser.role === 'operator');
+  var canDelete = currentUser && currentUser.role === 'admin';
   var si = STATUSES.indexOf(r.status);
   var steps = STATUSES.map(function(s,i) {
     var state = i<si?'done':i===si?'current':'pending';
@@ -1734,21 +1742,19 @@ function showRepair(id) {
   var files = parseFiles(r.files||'');
   var filesHtml = files.length ? '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">'+files.map(function(f, fi){
     var isImg = f.type && f.type.indexOf('image/') === 0;
-    var delBtn = canEdit ? '<button onclick="event.stopPropagation();deleteFile(\''+id+'\','+fi+')" title="Remove" style="position:absolute;top:3px;right:3px;z-index:3;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,0.75);border:none;color:#fff;font-size:12px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">×</button>' : '';
     if (isImg) {
-      return '<div style="position:relative;flex-shrink:0;">'+
+      return '<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;">'+
         '<div onclick="openLightbox(\''+id+'\','+fi+')" title="'+esc(f.name)+'" style="cursor:zoom-in;width:90px;height:90px;border-radius:5px;overflow:hidden;border:1px solid var(--border2);">'+
         '<img src="'+(f.thumb||'')+'" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.style.display=\'none\'" />'+
-        '</div>'+delBtn+'</div>';
+        '</div>'+
+        '<button onclick="deleteFile(\''+id+'\','+fi+')" style="background:none;border:none;color:#888;cursor:pointer;font-size:10px;font-family:Barlow Condensed,sans-serif;letter-spacing:0.05em;padding:0;line-height:1;">✕ remove</button>'+
+        '</div>';
     }
     if (!f.url) return ''; // skip broken entries
-    var fileDelBtn = canEdit ? '<button onclick="deleteFile(\''+id+'\','+fi+')" title="Remove" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 2px;line-height:1;">×</button>' : '';
+    var fileDelBtn = '<button onclick="deleteFile(\''+id+'\','+fi+')" title="Remove" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 2px;line-height:1;">×</button>';
     return '<div style="display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:4px 8px;font-size:11px;font-family:Barlow Condensed,sans-serif;font-weight:600;letter-spacing:0.05em;align-self:center;">'+
       '<a href="'+f.url+'" target="_blank" style="color:#5b9bd5;text-decoration:none;">📎 '+esc(f.name)+'</a>'+fileDelBtn+'</div>';
   }).join('')+'</div>' : '';
-
-  var canEdit = currentUser && (currentUser.role === 'admin' || currentUser.role === 'operator');
-  var canDelete = currentUser && currentUser.role === 'admin';
 
   document.getElementById('panel-body').innerHTML =
     '<button class="panel-close" onclick="closePanel()">×</button>'+
@@ -1969,7 +1975,15 @@ function openLightbox(repairId, fileIndex) {
   var files = parseFiles(r.files || '');
   var f = files[fileIndex];
   if (!f) return;
-  document.getElementById('lightbox-img').src = f.thumb || '';
+  // Use high-res Drive thumbnail in lightbox when available (much sharper than stored 300px base64)
+  var lbImg = document.getElementById('lightbox-img');
+  if (f.fileId) {
+    lbImg.src = 'https://drive.google.com/thumbnail?id=' + f.fileId + '&sz=w1200';
+    lbImg.onerror = function() { lbImg.src = f.thumb || ''; lbImg.onerror = null; };
+  } else {
+    lbImg.src = f.thumb || '';
+    lbImg.onerror = null;
+  }
   // Show/hide full-size link
   var fsLink = document.getElementById('lightbox-fullsize');
   if (fsLink) {
