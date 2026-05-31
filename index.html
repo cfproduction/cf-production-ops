@@ -503,10 +503,6 @@
   .notify-chk-wrap input[type="checkbox"] { appearance: none; -webkit-appearance: none; width: 13px; height: 13px; background: var(--bg3); border: 1px solid var(--border2); border-radius: 2px; position: relative; cursor: pointer; transition: all 0.12s; flex-shrink: 0; }
   .notify-chk-wrap input[type="checkbox"]:checked { background: var(--gold); border-color: var(--gold); }
   .notify-chk-wrap input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 3px; top: 0px; width: 4px; height: 7px; border: 2px solid #000; border-top: none; border-left: none; transform: rotate(45deg); }
-  #lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:900; align-items:center; justify-content:center; cursor:zoom-out; }
-  #lightbox img { max-width:92vw; max-height:90vh; border-radius:6px; box-shadow:0 8px 60px rgba(0,0,0,0.7); object-fit:contain; }
-  #lightbox-close { position:fixed; top:18px; right:24px; background:none; border:none; color:#fff; font-size:28px; cursor:pointer; opacity:0.7; line-height:1; }
-  #lightbox-close:hover { opacity:1; }
   .notify-btn { margin-top: 7px; background: none; border: 1px solid var(--border2); border-radius: 4px; padding: 5px 12px; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text2); cursor: pointer; transition: all 0.12s; }
   .notify-btn:hover { border-color: var(--gold); color: var(--gold); }
   .panel-save-bar { display: none; align-items: center; justify-content: space-between; background: rgba(232,170,69,0.06); border: 1px solid rgba(232,170,69,0.25); border-radius: 6px; padding: 9px 14px; margin: 12px 0 4px; gap: 10px; }
@@ -878,17 +874,6 @@
 
 <div class="toast" id="toast"></div>
 
-<!-- Image lightbox -->
-<div id="lightbox" onclick="closeLightbox()">
-  <button id="lightbox-close" onclick="closeLightbox()">×</button>
-  <div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;align-items:center;gap:14px;">
-    <img id="lightbox-img" src="" alt="" />
-    <a id="lightbox-fullsize" href="" target="_blank" onclick="event.stopPropagation()"
-       style="display:none;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#e8aa45;text-decoration:none;border:1px solid #e8aa45;border-radius:4px;padding:6px 16px;">
-      ↗ Open Full Size
-    </a>
-  </div>
-</div>
 
 <script>
 // ── Config ────────────────────────────────────────────────────
@@ -1080,32 +1065,12 @@ function deleteComment(repairId, idx) {
 // ── File attachments ─────────────────────────────────────────
 function parseFiles(raw) {
   if (!raw) return [];
-  try { return JSON.parse(raw); } catch(e) { return []; }
-}
-
-// Resize an image File to a max dimension using Canvas, returns base64 data URL
-function resizeImage(file, maxPx, quality) {
-  return new Promise(function(resolve, reject) {
-    var reader = new FileReader();
-    reader.onerror = function() { reject(new Error('Could not read file')); };
-    reader.onload = function(e) {
-      var img = new Image();
-      img.onerror = function() { reject(new Error('Could not decode image')); };
-      img.onload = function() {
-        try {
-          var ratio  = Math.min(maxPx / img.width, maxPx / img.height, 1);
-          var canvas = document.createElement('canvas');
-          canvas.width  = Math.round(img.width  * ratio);
-          canvas.height = Math.round(img.height * ratio);
-          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-          var result = canvas.toDataURL('image/jpeg', quality);
-          resolve(result);
-        } catch(ex) { reject(ex); }
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
+  try {
+    var arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    // Only keep real file entries — filter out any comment objects stored here by mistake
+    return arr.filter(function(f) { return f && f.name && (f.fileId || f.url || f.driveUrl); });
+  } catch(e) { return []; }
 }
 
 async function uploadFiles(repairId) {
@@ -1116,55 +1081,34 @@ async function uploadFiles(repairId) {
   var files = parseFiles(r.files||'');
 
   for (var i = 0; i < input.files.length; i++) {
-    var file   = input.files[i];
-    var isImg  = file.type && file.type.indexOf('image/') === 0;
+    var file = input.files[i];
     toast('Uploading ' + file.name + '…');
-
-    if (isImg) {
-      try {
-        // Thumbnail for panel (small, fits in Sheets cell)
-        var thumb = await resizeImage(file, 300, 0.65);
-        if (thumb.length > 48000) { toast('Image too large to store, try a smaller photo'); continue; }
-        // Full-size upload to Drive for readable lightbox link
-        var driveUrl = '';
-        var driveFileId = '';
-        try {
-          var fullB64 = await resizeImage(file, 1600, 0.88);
-          var dresp = await fetch(SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action:'uploadFile', fileName: file.name, mimeType:'image/jpeg', data: fullB64.split(',')[1] })
-          });
-          var djson = await dresp.json();
-          if (djson.fileId) {
-            driveFileId = djson.fileId;
-            driveUrl = 'https://drive.google.com/file/d/' + djson.fileId + '/view';
-          }
-          if (djson.error) console.warn('Drive upload error:', djson.error);
-        } catch(e) { console.warn('Drive upload failed:', e); }
-        files.push({ name: file.name, type: file.type, thumb: thumb, driveUrl: driveUrl, fileId: driveFileId });
-        toast('Uploaded: ' + file.name);
-      } catch(imgErr) { toast('Image error: ' + imgErr.message); continue; }
-    } else {
-      // Non-image: upload to Drive, store as link
+    try {
+      // Read raw file as base64 — no resizing, upload original to Drive
       var reader = new FileReader();
-      var b64 = await new Promise(function(res) {
-        reader.onload = function(e) { res(e.target.result.split(',')[1]); };
+      var b64 = await new Promise(function(res, rej) {
+        reader.onload  = function(e) { res(e.target.result.split(',')[1]); };
+        reader.onerror = function()  { rej(new Error('Could not read file')); };
         reader.readAsDataURL(file);
       });
-      try {
-        var resp = await fetch(SCRIPT_URL, {
-          method: 'POST',
-          body: JSON.stringify({ action:'uploadFile', fileName:file.name, mimeType:file.type, data:b64 })
+      var resp = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action:'uploadFile', fileName: file.name, mimeType: file.type || 'application/octet-stream', data: b64 })
+      });
+      var json = await resp.json();
+      if (json.fileId) {
+        files.push({
+          name: file.name,
+          type: file.type || '',
+          fileId: json.fileId,
+          driveUrl: 'https://drive.google.com/file/d/' + json.fileId + '/view'
         });
-        var json = await resp.json();
-        if (json.fileId) {
-          var fUrl = 'https://drive.google.com/file/d/' + json.fileId + '/view';
-          files.push({ name: file.name, type: file.type, url: fUrl, fileId: json.fileId });
-          toast('Uploaded: ' + file.name);
-        } else {
-          toast('Upload failed: ' + (json.error || 'unknown error'));
-        }
-      } catch(err) { toast('Upload failed: ' + err.message); }
+        toast('Uploaded: ' + file.name);
+      } else {
+        toast('Upload failed: ' + (json.error || 'unknown error'));
+      }
+    } catch(err) {
+      toast('Upload failed: ' + err.message);
     }
   }
 
@@ -1740,20 +1684,15 @@ function showRepair(id) {
 
   // File attachments
   var files = parseFiles(r.files||'');
-  var filesHtml = files.length ? '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">'+files.map(function(f, fi){
-    var isImg = f.type && f.type.indexOf('image/') === 0;
-    if (isImg) {
-      return '<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;">'+
-        '<div onclick="openLightbox(\''+id+'\','+fi+')" title="'+esc(f.name)+'" style="cursor:zoom-in;width:90px;height:90px;border-radius:5px;overflow:hidden;border:1px solid var(--border2);">'+
-        '<img src="'+(f.thumb||'')+'" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.style.display=\'none\'" />'+
-        '</div>'+
-        '<button onclick="deleteFile(\''+id+'\','+fi+')" style="background:none;border:none;color:#888;cursor:pointer;font-size:10px;font-family:Barlow Condensed,sans-serif;letter-spacing:0.05em;padding:0;line-height:1;">✕ remove</button>'+
-        '</div>';
-    }
-    if (!f.url) return ''; // skip broken entries
-    var fileDelBtn = '<button onclick="deleteFile(\''+id+'\','+fi+')" title="Remove" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 2px;line-height:1;">×</button>';
-    return '<div style="display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:4px 8px;font-size:11px;font-family:Barlow Condensed,sans-serif;font-weight:600;letter-spacing:0.05em;align-self:center;">'+
-      '<a href="'+f.url+'" target="_blank" style="color:#5b9bd5;text-decoration:none;">📎 '+esc(f.name)+'</a>'+fileDelBtn+'</div>';
+  var filesHtml = files.length ? '<div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">'+files.map(function(f, fi){
+    var link = f.driveUrl || f.url || '';
+    var icon = f.type && f.type.indexOf('image/') === 0 ? '🖼' : '📎';
+    return '<div style="display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:7px 10px;">'+
+      (link
+        ? '<a href="'+link+'" target="_blank" style="flex:1;color:#5b9bd5;text-decoration:none;font-size:12px;font-family:Barlow Condensed,sans-serif;font-weight:600;letter-spacing:0.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+icon+' '+esc(f.name)+'</a>'
+        : '<span style="flex:1;font-size:12px;font-family:Barlow Condensed,sans-serif;color:var(--text2);">'+icon+' '+esc(f.name)+'</span>')+
+      '<button onclick="deleteFile(\''+id+'\','+fi+')" title="Remove" style="flex-shrink:0;background:none;border:none;color:#888;cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;">✕</button>'+
+      '</div>';
   }).join('')+'</div>' : '';
 
   document.getElementById('panel-body').innerHTML =
@@ -1969,40 +1908,6 @@ function deleteFile(repairId, fileIndex) {
   showRepair(repairId);
 }
 
-function openLightbox(repairId, fileIndex) {
-  var r = repairs.find(function(x){ return x.id === repairId; });
-  if (!r) return;
-  var files = parseFiles(r.files || '');
-  var f = files[fileIndex];
-  if (!f) return;
-  // Use high-res Drive thumbnail in lightbox when available (much sharper than stored 300px base64)
-  var lbImg = document.getElementById('lightbox-img');
-  if (f.fileId) {
-    lbImg.src = 'https://drive.google.com/thumbnail?id=' + f.fileId + '&sz=w1200';
-    lbImg.onerror = function() { lbImg.src = f.thumb || ''; lbImg.onerror = null; };
-  } else {
-    lbImg.src = f.thumb || '';
-    lbImg.onerror = null;
-  }
-  // Show/hide full-size link
-  var fsLink = document.getElementById('lightbox-fullsize');
-  if (fsLink) {
-    if (f.driveUrl) {
-      fsLink.href = f.driveUrl;
-      fsLink.style.display = 'inline-block';
-    } else {
-      fsLink.style.display = 'none';
-    }
-  }
-  document.getElementById('lightbox').style.display = 'flex';
-  document.addEventListener('keydown', _lbKey);
-}
-function closeLightbox() {
-  document.getElementById('lightbox').style.display = 'none';
-  document.getElementById('lightbox-img').src = '';
-  document.removeEventListener('keydown', _lbKey);
-}
-function _lbKey(e) { if (e.key === 'Escape') closeLightbox(); }
 
 function openPanel() {
   document.getElementById('panel').classList.add('open');
