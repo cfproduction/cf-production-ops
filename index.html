@@ -1091,11 +1091,17 @@ async function uploadFiles(repairId) {
         reader.onerror = function()  { rej(new Error('Could not read file')); };
         reader.readAsDataURL(file);
       });
+      // Warn if file is very large
+      if (file.size > 8 * 1024 * 1024) {
+        toast('File too large (max 8MB). Try compressing it first.');
+        continue;
+      }
       var resp = await fetch(SCRIPT_URL, {
         method: 'POST',
         body: JSON.stringify({ action:'uploadFile', fileName: file.name, mimeType: file.type || 'application/octet-stream', data: b64 })
       });
       var json = await resp.json();
+      console.log('Upload response:', JSON.stringify(json).substring(0, 300));
       if (json.fileId) {
         files.push({
           name: file.name,
@@ -1105,7 +1111,7 @@ async function uploadFiles(repairId) {
         });
         toast('Uploaded: ' + file.name);
       } else {
-        toast('Upload failed: ' + (json.error || 'unknown error'));
+        toast('Upload failed: ' + (json.error || JSON.stringify(json).substring(0, 100)));
       }
     } catch(err) {
       toast('Upload failed: ' + err.message);
