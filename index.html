@@ -1737,6 +1737,7 @@ function showRepair(id) {
     pf('Campus', r.campus)+
     pf('Serial / Asset Tag', r.serial||'—')+
     pf('Reported', fmtDate(r.reported))+
+    (canEdit && r.lastModified ? pf('Last Modified', r.lastModified + (r.lastModifiedBy ? ' by ' + r.lastModifiedBy : '')) : '')+
     (canEdit?
       '<div class="pf"><div class="pf-label">Assigned To</div>'+
       '<select class="inline-input" id="assign-sel-'+id+'" onchange="markPanelDirty(\''+id+'\'); updateNotifyBtn(\''+id+'\',this.value)">'+
@@ -1857,8 +1858,12 @@ function patchRepair(id, changes) {
   Object.assign(r, localChanges);
   var payload = Object.assign({}, r);
   if (notifyAssignee !== undefined) payload.notifyAssignee = notifyAssignee;
+  if (currentUser && currentUser.name) payload.modifiedBy = currentUser.name;
   api({ action:'updateRepair', data: payload }, function(res) {
     if (res.error) { toast('Error: '+res.error); return; }
+    // Update local copy with stamped values from response
+    if (res.lastModified)   r.lastModified   = res.lastModified;
+    if (res.lastModifiedBy) r.lastModifiedBy = res.lastModifiedBy;
     toast('Saved');
     renderRepairs();
     if (selId === id) showRepair(id);
