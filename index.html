@@ -85,6 +85,19 @@
     border-radius: 4px 4px 0 0;
   }
 
+  /* ── Sub-tabs (Open / Resolved inside Repairs) ── */
+  .subtab {
+    background: none; border: 1px solid var(--border2);
+    color: var(--text2);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 12px; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 5px 18px; border-radius: 4px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .subtab:hover { color: var(--text); border-color: var(--gold); }
+  .subtab-active { background: rgba(232,170,69,0.12); border-color: var(--gold); color: var(--gold); }
+
   /* ── Layout ── */
   .main { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
   .view { display: none; }
@@ -659,6 +672,10 @@
       </div>
       <button class="add-btn" onclick="openModal('repair')">+ Add Item</button>
     </div>
+    <div style="display:flex;gap:4px;margin-bottom:14px;">
+      <button id="subtab-open" onclick="showRepairsView(this)" class="subtab subtab-active">Open Tickets</button>
+      <button id="subtab-resolved" onclick="showResolvedView(this)" class="subtab">Resolved</button>
+    </div>
     <div id="repair-stats" class="stats"></div>
     <div class="filters">
       <button class="fb on" onclick="setRFilter('cat','all',this)">All</button>
@@ -892,7 +909,7 @@ var users    = [];
 var selectedIds = new Set();
 var lastClickedIdx = -1;
 var lastRenderedIds = [];
-var rFilter  = { cat:'all', campus:'all', status:'all', assignee:'all', search:'' };
+var rFilter  = { cat:'all', campus:'all', status:'all', assignee:'all', search:'', resolved: false };
 
 // Capture deep-link intent immediately on script parse, before any auth flow
 var _deepRepairId    = null;
@@ -1532,6 +1549,12 @@ function toast(msg) {
 // ── Repairs render ────────────────────────────────────────────
 function renderRepairs() {
   var data = repairs.filter(function(r) {
+    // Resolved tab shows only resolved; Repairs tab hides resolved
+    if (rFilter.resolved) {
+      if (r.status !== 'Resolved') return false;
+    } else {
+      if (r.status === 'Resolved') return false;
+    }
     if (rFilter.cat !== 'all' && r.type !== rFilter.cat) return false;
     if (rFilter.campus !== 'all' && r.campus !== rFilter.campus) return false;
     if (rFilter.status !== 'all' && r.status !== rFilter.status) return false;
@@ -1566,12 +1589,16 @@ function renderRepairs() {
   }
 
   // Stats reflect filtered data
-  var open = data.filter(function(r){ return r.status !== 'Resolved'; }).length;
-  var crit = data.filter(function(r){ return r.priority==='Critical' && r.status!=='Resolved'; }).length;
-  var res  = data.filter(function(r){ return r.status==='Resolved'; }).length;
-  document.getElementById('repair-stats').innerHTML =
-    stat(data.length,'Showing','c-gold') + stat(open,'Open','c-gold') +
-    stat(crit,'Critical','c-gold') + stat(res,'Resolved','c-gold');
+  var statsHtml;
+  if (rFilter.resolved) {
+    statsHtml = stat(data.length,'Resolved','c-gold');
+  } else {
+    var crit = data.filter(function(r){ return r.priority==='Critical'; }).length;
+    var totalResolved = repairs.filter(function(r){ return r.status==='Resolved'; }).length;
+    statsHtml = stat(data.length,'Showing','c-gold') + stat(data.length,'Open','c-gold') +
+      stat(crit,'Critical','c-gold') + stat(totalResolved,'Resolved','c-gold');
+  }
+  document.getElementById('repair-stats').innerHTML = statsHtml;
 
   var list = document.getElementById('repair-list');
   var countEl = document.getElementById('repair-row-count');
@@ -2035,6 +2062,22 @@ function showView(name, btn) {
   document.getElementById('view-'+name).classList.add('active');
   if (btn) btn.classList.add('active');
   closePanel();
+}
+
+function showRepairsView(btn) {
+  rFilter.resolved = false;
+  rFilter.status = 'all';
+  document.getElementById('subtab-open').classList.add('subtab-active');
+  document.getElementById('subtab-resolved').classList.remove('subtab-active');
+  renderRepairs();
+}
+
+function showResolvedView(btn) {
+  rFilter.resolved = true;
+  rFilter.status = 'all';
+  document.getElementById('subtab-resolved').classList.add('subtab-active');
+  document.getElementById('subtab-open').classList.remove('subtab-active');
+  renderRepairs();
 }
 
 // ── Filter controls ───────────────────────────────────────────
