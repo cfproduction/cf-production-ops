@@ -796,7 +796,13 @@
         </div>
         <div class="fg"><label class="fl">Description of Issue</label>
           <textarea class="fi" id="r-desc" style="min-height:90px" placeholder="Describe what's wrong, when it started, and any relevant context…"></textarea></div>
-        <div style="margin-top:1.25rem"><button class="btn btn-dark" style="width:100%" onclick="submitReport()">Submit Report</button></div>
+        <div class="fg">
+          <label class="fl">Photos / Documents (optional)</label>
+          <input type="file" id="r-files" multiple accept="image/*,.pdf,.doc,.docx" style="display:none" onchange="showReportFileList()"/>
+          <button type="button" onclick="document.getElementById('r-files').click()" class="act-btn" style="font-size:12px;padding:8px 14px;width:100%;text-align:center;">+ Add Photos or Documents</button>
+          <div id="r-file-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px;"></div>
+        </div>
+        <div style="margin-top:1.25rem"><button id="r-submit-btn" class="btn btn-dark" style="width:100%" onclick="submitReport()">Submit Report</button></div>
       </div>
     </div>
   </div>
@@ -1767,10 +1773,10 @@ function showRepair(id) {
       pf('Notes', r.notes||'—')+
       '<hr class="div" />'
     )+
-    // File upload section
+    // File upload section — open to all logged-in users
     '<div class="pf"><div class="pf-label">Attachments</div>'+
     (filesHtml || '<div style="font-size:12px;color:var(--text3);margin-bottom:6px;">No attachments yet</div>')+
-    (canEdit?
+    (currentUser?
       '<div style="margin-top:6px;">'+
       '<input type="file" id="file-upload-'+id+'" multiple accept="image/*,.pdf,.doc,.docx" style="display:none" onchange="uploadFiles(\''+id+'\')"/>'+
       '<button onclick="document.getElementById(\'file-upload-'+id+'\').click()" class="act-btn" style="margin-top:4px;font-size:12px;padding:7px;">+ Upload Photo or Document</button>'+
@@ -2017,10 +2023,25 @@ function saveProject() {
   });
 }
 
-function submitReport() {
+function showReportFileList() {
+  var input = document.getElementById('r-files');
+  var list  = document.getElementById('r-file-list');
+  if (!input || !list) return;
+  list.innerHTML = Array.from(input.files).map(function(f) {
+    var icon = f.type && f.type.indexOf('image/') === 0 ? '🖼' : '📎';
+    return '<div style="font-size:12px;font-family:Barlow Condensed,sans-serif;color:var(--text2);padding:3px 0;">'+icon+' '+esc(f.name)+'</div>';
+  }).join('');
+}
+
+async function submitReport() {
   var name = document.getElementById('r-name').value.trim();
   var item = document.getElementById('r-item').value.trim();
-  if (!name||!item) { alert('Please fill in your name and the equipment name.'); return; }
+  if (!name || !item) { alert('Please fill in your name and the equipment name.'); return; }
+
+  var btn = document.getElementById('r-submit-btn');
+  btn.textContent = 'Submitting…';
+  btn.disabled = true;
+
   var data = {
     campus:   document.getElementById('r-campus').value,
     type:     document.getElementById('r-type').value,
@@ -2031,16 +2052,69 @@ function submitReport() {
     assigned: '',
     status:   'Reported',
     reported: new Date().toISOString().slice(0,10),
-    notes:    'Reported by: '+name
+    notes:    'Reported by: ' + name
   };
-  api({ action:'saveRepair', data:data }, function(res) {
-    if (res.error) { toast('Error: '+res.error); return; }
+
+  try {
+    // Step 1: create the ticket
+    var res = await new Promise(function(resolve, reject) {
+      api({ action:'saveRepair', data:data }, function(r) {
+        if (r.error) reject(new Error(r.error)); else resolve(r);
+      });
+    });
     data.id = res.id;
     repairs.unshift(data);
+
+    // Step 2: upload any attached files
+    var fileInput = document.getElementById('r-files');
+    var filesArr  = [];
+    if (fileInput && fileInput.files.length) {
+      btn.textContent = 'Uploading photos…';
+      for (var i = 0; i < fileInput.files.length; i++) {
+        var file = fileInput.files[i];
+        if (file.size > 8 * 1024 * 1024) { toast('Skipping ' + file.name + ' — over 8MB'); continue; }
+        try {
+          var reader = new FileReader();
+          var b64 = await new Promise(function(res2, rej2) {
+            reader.onload  = function(e) { res2(e.target.result.split(',')[1]); };
+            reader.onerror = function()  { rej2(new Error('Read error')); };
+            reader.readAsDataURL(file);
+          });
+          var resp = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action:'uploadFile', fileName: file.name, mimeType: file.type || 'application/octet-stream', data: b64 })
+          });
+          var json = await resp.json();
+          if (json.fileId) {
+            filesArr.push({ name: file.name, type: file.type || '', fileId: json.fileId, driveUrl: 'https://drive.google.com/file/d/' + json.fileId + '/view' });
+          }
+        } catch(e) { toast('Could not upload ' + file.name); }
+      }
+      // Patch ticket with uploaded files
+      if (filesArr.length) {
+        var r = repairs.find(function(x){ return x.id === data.id; });
+        if (r) {
+          r.files = JSON.stringify(filesArr);
+          await new Promise(function(resolve) {
+            api({ action:'updateRepair', data: Object.assign({}, r) }, resolve);
+          });
+        }
+      }
+    }
+
+    // Step 3: success
     document.getElementById('report-success').classList.add('show');
     clearFields(['r-name','r-item','r-serial','r-desc']);
+    if (fileInput) fileInput.value = '';
+    document.getElementById('r-file-list').innerHTML = '';
     setTimeout(function(){ document.getElementById('report-success').classList.remove('show'); }, 6000);
-  });
+
+  } catch(err) {
+    toast('Error: ' + err.message);
+  } finally {
+    btn.textContent = 'Submit Report';
+    btn.disabled = false;
+  }
 }
 
 function confirmDelete(type, id) {
